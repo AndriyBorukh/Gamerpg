@@ -1,0 +1,273 @@
+--- src/components/MonsterEncounterModal.tsx
++++ src/components/MonsterEncounterModal.tsx
+@@ -2,5 +2,6 @@
+ import { motion, AnimatePresence } from 'framer-motion';
+ import { MonsterSquad } from '../lib/monsters/wanderingMonsters';
+-import { WorldProgress } from '../types';
++import { WorldProgress, HiredCompanion } from '../types';
++import { COMPANION_CLASSES } from '../lib/companionClasses';
+ import { DEFAULT_PLAYER_STATS } from '../lib/worldData';
+ import { 
+@@ -17,5 +18,6 @@
+     Crosshair, 
+     Flame,
+-    Skull
++    Skull,
++    Star
+ } from 'lucide-react';
+ 
+@@ -23,4 +25,6 @@
+     squad: MonsterSquad;
+     progress: WorldProgress;
++    onUpdateProgress: (updated: WorldProgress) => void;
++    onSquadUpdate: (squad: MonsterSquad) => void;
+     onStartCombat: (squad: MonsterSquad, targetType: 'leader' | 'ally', allyIndex?: number, preemptiveDamage?: number) => void;
+     onFleeSuccess: (squad: MonsterSquad) => void;
+@@ -33,4 +37,6 @@
+     progress,
++    onUpdateProgress,
++    onSquadUpdate,
+     onStartCombat,
+     onFleeSuccess,
+@@ -41,4 +47,6 @@
+     const [ambushUsed, setAmbushUsed] = useState(false);
+     const [preemptiveDamage, setPreemptiveDamage] = useState(0);
++    const [activeCompanionAction, setActiveCompanionAction] = useState<string | null>(null); // companion id
++    const [combatLog, setCombatLog] = useState<string[]>([]);
+ 
+     const playerStats = progress?.playerStats || DEFAULT_PLAYER_STATS;
+@@ -69,4 +77,117 @@
+ 
++    const handleCompanionAbility = (companion: HiredCompanion) => {
++        if (companion.currentAbilityCharges <= 0) return;
++        const cClass = COMPANION_CLASSES[companion.companionClassId];
++        if (!cClass) return;
++        
++        const updatedProgress = { ...progress };
++        const companions = [...(updatedProgress.hiredNpcs || [])];
++        const cIdx = companions.findIndex(c => c.id === companion.id);
++        if (cIdx >= 0) {
++            companions[cIdx] = { ...companions[cIdx], currentAbilityCharges: companions[cIdx].currentAbilityCharges - 1 };
++        }
++        updatedProgress.hiredNpcs = companions;
++
++        let newSquad = { ...squad };
++        let logMsg = `${companion.name} використовує здібність "${cClass.abilityName}"! `;
++
++        if (cClass.abilityType === 'damage_single') {
++            // Auto target leader if alive, else first alive ally
++            if (!newSquad.leader.isDefeated) {
++                newSquad.leader.hp -= cClass.abilityPower;
++                if (newSquad.leader.hp <= 0) newSquad.leader.isDefeated = true;
++                logMsg += `Завдано ${cClass.abilityPower} шкоди вожаку!`;
++            } else {
++                const aliveAllyIdx = newSquad.allies.findIndex(a => !a.isDefeated);
++                if (aliveAllyIdx >= 0) {
++                    newSquad.allies[aliveAllyIdx].hp -= cClass.abilityPower;
++                    if (newSquad.allies[aliveAllyIdx].hp <= 0) newSquad.allies[aliveAllyIdx].isDefeated = true;
++                    logMsg += `Завдано ${cClass.abilityPower} шкоди союзнику!`;
++                }
++            }
++        } else if (cClass.abilityType === 'damage_aoe') {
++            if (!newSquad.leader.isDefeated) {
++                newSquad.leader.hp -= cClass.abilityPower;
++                if (newSquad.leader.hp <= 0) newSquad.leader.isDefeated = true;
++            }
++            newSquad.allies.forEach(a => {
++                if (!a.isDefeated) {
++                    a.hp -= cClass.abilityPower;
++                    if (a.hp <= 0) a.isDefeated = true;
++                }
++            });
++            logMsg += `Завдано ${cClass.abilityPower} шкоди всім ворогам!`;
++        } else if (cClass.abilityType === 'buff_player') {
++            setPreemptiveDamage(prev => prev + cClass.abilityPower);
++            logMsg += `Отримано посилення перед боєм!`;
++        } else if (cClass.abilityType === 'summon' && cClass.summonTemplate) {
++            const summon: HiredCompanion = {
++                id: `summon_${Date.now()}`,
++                name: cClass.summonTemplate.name || 'Призов',
++                title: cClass.summonTemplate.title || 'Істота',
++                avatar: cClass.summonTemplate.avatar || '👻',
++                hp: cClass.summonTemplate.baseHp || 50,
++                baseHp: cClass.summonTemplate.baseHp || 50,
++                strength: cClass.summonTemplate.strength || 5,
++                agility: cClass.summonTemplate.agility || 5,
++                armor: cClass.summonTemplate.armor || 0,
++                difficulty: 'Легко',
++                companionClassId: 'summon',
++                level: 0,
++                xp: 0,
++                xpToNextLevel: 100,
++                maxAbilityCharges: 0,
++                currentAbilityCharges: 0,
++                survivalProbability: 100,
++                isDead: false,
++                isSummon: true
++            };
++            updatedProgress.hiredNpcs.push(summon);
++            logMsg += `Призвано істоту ${summon.name}!`;
++        } else if (cClass.abilityType === 'raise_undead' && cClass.summonTemplate) {
++            const deadIdx = updatedProgress.hiredNpcs.findIndex(c => c.isDead);
++            if (deadIdx >= 0) {
++                const deadCompanion = updatedProgress.hiredNpcs[deadIdx];
++                updatedProgress.hiredNpcs.splice(deadIdx, 1);
++                const undead: HiredCompanion = {
++                    ...deadCompanion,
++                    name: cClass.summonTemplate.name || 'Нежить',
++                    title: cClass.summonTemplate.title || 'Мрець',
++                    avatar: cClass.summonTemplate.avatar || '💀',
++                    hp: cClass.summonTemplate.baseHp || 50,
++                    baseHp: cClass.summonTemplate.baseHp || 50,
++                    isDead: false,
++                    isSummon: true,
++                    companionClassId: 'undead'
++                };
++                updatedProgress.hiredNpcs.push(undead);
++                logMsg += `Мертве тіло перетворено на нежить!`;
++            } else {
++                logMsg += `Немає мертвих союзників для підняття!`;
++                // Revert charge
++                companions[cIdx].currentAbilityCharges += 1;
++            }
++        }
++
++        setCombatLog(prev => [logMsg, ...prev].slice(0, 5));
++        onUpdateProgress(updatedProgress);
++        onSquadUpdate(newSquad);
++    };
++
++    const handleCompanionAutoCombat = (companion: HiredCompanion, targetType: 'leader'|'ally', allyIndex?: number) => {
++        const updatedProgress = { ...progress };
++        const companions = [...(updatedProgress.hiredNpcs || [])];
++        const cIdx = companions.findIndex(c => c.id === companion.id);
++        if (cIdx < 0) return;
++
++        let target = targetType === 'leader' ? squad.leader : squad.allies[allyIndex!];
++        let newSquad = { ...squad };
++
++        const compPower = (companion.strength || 1) + (companion.agility || 1);
++        const targetPower = (target.strength || 1) + (target.agility || 1);
++        
++        let logMsg = '';
++        const winChance = Math.min(90, Math.max(10, (compPower / (compPower + targetPower)) * 100));
++        const roll = Math.random() * 100;
++
++        if (roll <= winChance) {
++            // Companion wins
++            logMsg = `⚔️ ${companion.name} перемагає ${target.name}!`;
++            if (targetType === 'leader') newSquad.leader.isDefeated = true;
++            else newSquad.allies[allyIndex!].isDefeated = true;
++
++            // XP and Level up
++            if (!companion.isSummon) {
++                const xpGain = 50 + (target.strength || 0) * 10;
++                companions[cIdx].xp += xpGain;
++                logMsg += ` Отримано ${xpGain} XP.`;
++                if (companions[cIdx].xp >= companions[cIdx].xpToNextLevel) {
++                    companions[cIdx].level += 1;
++                    companions[cIdx].xp -= companions[cIdx].xpToNextLevel;
++                    companions[cIdx].xpToNextLevel = Math.floor(companions[cIdx].xpToNextLevel * 1.5);
++                    companions[cIdx].maxAbilityCharges = companions[cIdx].level + 1;
++                    companions[cIdx].currentAbilityCharges = companions[cIdx].maxAbilityCharges;
++                    companions[cIdx].strength = (companions[cIdx].strength || 1) + 1;
++                    companions[cIdx].agility = (companions[cIdx].agility || 1) + 1;
++                    companions[cIdx].baseHp = (companions[cIdx].baseHp || 10) + 10;
++                    logMsg += ` 🌟 Рівень підвищено! Здібності відновлено.`;
++                }
++            }
++        } else {
++            // Companion loses
++            logMsg = `❌ ${companion.name} зазнає поразки від ${target.name}.`;
++            if (!companion.isSummon) {
++                const survivalRoll = Math.random() * 100;
++                if (survivalRoll <= companion.survivalProbability) {
++                    companions[cIdx].survivalProbability = Math.max(0, companions[cIdx].survivalProbability - 10);
++                    logMsg += ` Дивом виживає (шанс виживання впав до ${companions[cIdx].survivalProbability}%).`;
++                } else {
++                    companions[cIdx].isDead = true;
++                    logMsg += ` ☠️ Гине в бою...`;
++                }
++            } else {
++                companions[cIdx].isDead = true;
++                logMsg += ` Призвана істота знищена.`;
++            }
++        }
++
++        setActiveCompanionAction(null);
++        setCombatLog(prev => [logMsg, ...prev].slice(0, 5));
++        updatedProgress.hiredNpcs = companions;
++        onUpdateProgress(updatedProgress);
++        onSquadUpdate(newSquad);
++    };
++
+     const aliveAlliesCount = squad.allies.filter(a => !a.isDefeated).length;
+@@ -140,4 +261,71 @@
+ 
++                {/* Combat Log */}
++                {combatLog.length > 0 && (
++                    <div className="bg-black/60 border border-stone-800 rounded-xl p-3 text-xs space-y-1">
++                        {combatLog.map((log, i) => (
++                            <div key={i} className={i === 0 ? "text-amber-300 font-bold" : "text-stone-500"}>
++                                {log}
++                            </div>
++                        ))}
++                    </div>
++                )}
++
++                {/* Companions Section */}
++                {progress.hiredNpcs && progress.hiredNpcs.filter(c => !c.isDead).length > 0 && (
++                    <div className="space-y-2">
++                        <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
++                            <Users className="w-4 h-4" /> Ваш загін (Дії супутників):
++                        </h3>
++                        <div className="flex gap-2 overflow-x-auto pb-2">
++                            {progress.hiredNpcs.filter(c => !c.isDead).map(companion => {
++                                const cClass = companion.companionClassId ? COMPANION_CLASSES[companion.companionClassId] : null;
++                                const isSummon = companion.isSummon;
++                                return (
++                                <div key={companion.id} className="min-w-[200px] bg-[#1b120c] border border-emerald-900/40 rounded-xl p-3 flex flex-col gap-2 shrink-0">
++                                    <div className="flex items-center gap-2">
++                                        <div className="text-2xl">{companion.avatar}</div>
++                                        <div>
++                                            <div className="font-bold text-emerald-200 text-xs">{companion.name}</div>
++                                            <div className="text-[9px] text-stone-400">{cClass?.name || companion.title} • Рівень {companion.level}</div>
++                                        </div>
++                                    </div>
++                                    <div className="flex flex-col gap-1.5 mt-auto">
++                                        {!isSummon && cClass && (
++                                            <button
++                                                onClick={() => handleCompanionAbility(companion)}
++                                                disabled={companion.currentAbilityCharges <= 0}
++                                                className={`px-2 py-1 text-[10px] font-bold rounded flex items-center justify-between ${companion.currentAbilityCharges > 0 ? 'bg-indigo-900/80 hover:bg-indigo-800 text-indigo-200 cursor-pointer' : 'bg-stone-900 text-stone-600 cursor-not-allowed'}`}
++                                            >
++                                                <span>✨ {cClass.abilityName}</span>
++                                                <span>{companion.currentAbilityCharges}/{companion.maxAbilityCharges}</span>
++                                            </button>
++                                        )}
++                                        <button
++                                            onClick={() => setActiveCompanionAction(activeCompanionAction === companion.id ? null : companion.id)}
++                                            className="px-2 py-1 bg-amber-900/60 hover:bg-amber-800/80 text-amber-200 text-[10px] font-bold rounded cursor-pointer transition"
++                                        >
++                                            ⚔️ Відправити в бій
++                                        </button>
++                                        {activeCompanionAction === companion.id && (
++                                            <div className="flex flex-col gap-1 mt-1 p-1.5 bg-black/40 rounded border border-amber-900/50">
++                                                <div className="text-[9px] text-stone-400 mb-0.5">Оберіть ціль:</div>
++                                                {!squad.leader.isDefeated && (
++                                                    <button onClick={() => handleCompanionAutoCombat(companion, 'leader')} className="text-[10px] text-left px-1.5 py-1 bg-red-900/40 hover:bg-red-800 rounded text-red-200 cursor-pointer">Вожак</button>
++                                                )}
++                                                {squad.allies.map((a, i) => !a.isDefeated && (
++                                                    <button key={a.id} onClick={() => handleCompanionAutoCombat(companion, 'ally', i)} className="text-[10px] text-left px-1.5 py-1 bg-stone-800 hover:bg-stone-700 rounded text-stone-300 cursor-pointer">Союзник #{i+1}</button>
++                                                ))}
++                                            </div>
++                                        )}
++                                    </div>
++                                </div>
++                                );
++                            })}
++                        </div>
++                    </div>
++                )}
++
+                 {/* Preemptive Bow Ambush */}

@@ -1,0 +1,25 @@
+--- src/components/TavernModal.tsx
++++ src/components/TavernModal.tsx
+@@ -910,8 +910,18 @@
+         }
+ 
++        const companionClasses = Object.keys(COMPANION_CLASSES);
++        const randomClassId = companionClasses[Math.floor(Math.random() * companionClasses.length)];
++        
++        const hiredCompanion: HiredCompanion = {
++            ...npc,
++            companionClassId: randomClassId,
++            level: 0,
++            xp: 0,
++            xpToNextLevel: 100,
++            maxAbilityCharges: 1, // level 0 + 1 = 1
++            currentAbilityCharges: 1,
++            survivalProbability: 98,
++            isDead: false
++        };
++
+         const updatedHiredNpcs = [...(progress.hiredNpcs || [])];
+         if (!updatedHiredNpcs.some(n => n.id === npc.id)) {
+-            updatedHiredNpcs.push(npc);
++            updatedHiredNpcs.push(hiredCompanion);
+         }

@@ -1,0 +1,37 @@
+--- src/lib/worldData.ts
++++ src/lib/worldData.ts
+@@ -658,6 +658,16 @@
+ }
+ 
++export function getOpponentXpReward(opponent: OpponentData, activityType: string, newWins: number): number {
++    // Override XP based on number of wins against this opponent (for tavern games/activities)
++    if (newWins === 1) {
++        return 10;
++    } else if (newWins === 2) {
++        return 5;
++    } else {
++        return 6;
++    }
++}
++
+ export function recordVictory(
+     progress: WorldProgress, 
+     opponent: OpponentData, 
+@@ -764,16 +774,7 @@
+         }
+     }
+ 
+-    let xpEarned = opponent.rewards.xp || (activityType === 'brawl' ? 120 : 100);
+-
+-    // Override XP based on number of wins against this opponent (for tavern games/activities)
+-    if (newWins === 1) {
+-        xpEarned = 10;
+-    } else if (newWins === 2) {
+-        xpEarned = 5;
+-    } else if (newWins >= 3) {
+-        xpEarned = 6;
+-    }
++    const xpEarned = getOpponentXpReward(opponent, activityType, newWins);
+ 
+     const intermediateProgress: WorldProgress = {
+         ...progress,

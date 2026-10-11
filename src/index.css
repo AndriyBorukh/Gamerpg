@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .font-cinzel {
+    font-family: 'Cinzel', serif;
+  }
+  .font-cinzel-decorative {
+    font-family: 'Cinzel Decorative', serif;
+  }
+  .font-medieval {
+    font-family: 'MedievalSharp', cursive;
+  }
+  .font-garamond {
+    font-family: 'Cormorant Garamond', serif;
+  }
+}
+
+/* Custom scrollbar for better visibility of scrollable lists on dark themed components */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(245, 158, 11, 0.45) rgba(16, 10, 13, 0.5);
+  -webkit-overflow-scrolling: touch;
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(16, 10, 13, 0.5);
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(245, 158, 11, 0.45); /* Amber accent */
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(245, 158, 11, 0.75);
+}
+
+

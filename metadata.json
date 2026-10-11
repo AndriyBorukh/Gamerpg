@@ -1,0 +1,8 @@
+{
+  "name": "Tavern Journey",
+  "description": "Лицарська RPG гра з живою картою світу, мандруючими загонами монстрів, нежиттю на цвинтарях, тавернами, фехтуванням та турнірами",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
