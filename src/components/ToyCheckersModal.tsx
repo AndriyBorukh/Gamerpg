@@ -560,11 +560,108 @@ export function ToyCheckersModal({
             return;
         }
 
-        // Shuffle moves to add unpredictability
-        const shuffledMoves = [...validMoves].sort(() => Math.random() - 0.5);
-        const attackMoves = shuffledMoves.filter(m => m.to.isAttack);
+        // AI Smart Heuristic: score each move for tactical advantage, safety, crowning, and piece preservation
+        const evaluateAiMove = (candidate: typeof validMoves[0], curBoard: BoardState): number => {
+            let score = 0;
+            const { from, to, piece } = candidate;
 
-        let selectedCandidate = attackMoves.length > 0 ? attackMoves[0] : shuffledMoves[0];
+            if (to.isAttack) {
+                score += 35; // Base attack reward
+                const defPos = to.defenderPos || { r: to.r, c: to.c };
+                const defender = curBoard[defPos.r]?.[defPos.c];
+
+                if (piece.isDamka) score += 12; // Damka has attack bonus
+                if (defender?.isDamka) score += 30; // Eliminating a player Damka is high priority!
+
+                // If attack also promotes piece to Damka
+                if (to.r === boardSize - 1 && !piece.isDamka) {
+                    score += 40;
+                }
+
+                // Check if other player pieces can counter-attack the landing square
+                let landingThreatened = false;
+                for (let r = 0; r < boardSize; r++) {
+                    for (let c = 0; c < boardSize; c++) {
+                        if (curBoard[r][c]?.owner === 'player' && (r !== defPos.r || c !== defPos.c)) {
+                            const pMoves = getValidMoves(r, c, curBoard);
+                            if (pMoves.some(pm => pm.r === to.r && pm.c === to.c)) {
+                                landingThreatened = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (landingThreatened) break;
+                }
+                if (landingThreatened) {
+                    score -= piece.isDamka ? 35 : 18;
+                }
+            } else {
+                // Simple move
+                // Crowning move priority
+                if (to.r === boardSize - 1 && !piece.isDamka) {
+                    score += 50;
+                }
+
+                // Preserve back rank (row 0)
+                if (from.r === 0 && !piece.isDamka) {
+                    const playerNearby = curBoard.some((row, rIdx) => 
+                        rIdx <= 4 && row.some(p => p && p.owner === 'player')
+                    );
+                    if (playerNearby) score -= 18;
+                }
+
+                // Center control
+                const centerMin = Math.floor(boardSize / 4);
+                const centerMax = boardSize - centerMin - 1;
+                if (to.c >= centerMin && to.c <= centerMax) score += 6;
+                if (to.c === 0 || to.c === boardSize - 1) score += 4; // Edge safety
+
+                // Advancement towards promotion
+                if (!piece.isDamka) {
+                    score += (to.r - from.r) * 5;
+                } else {
+                    // Damka hunting closest player piece
+                    let minPlayerDist = 99;
+                    for (let r = 0; r < boardSize; r++) {
+                        for (let c = 0; c < boardSize; c++) {
+                            if (curBoard[r][c]?.owner === 'player') {
+                                const d = Math.abs(to.r - r) + Math.abs(to.c - c);
+                                if (d < minPlayerDist) minPlayerDist = d;
+                            }
+                        }
+                    }
+                    score += Math.max(0, 16 - minPlayerDist);
+                }
+
+                // TACTICAL SAFETY: Does moving to `to` blunder into immediate attack by player?
+                let threatened = false;
+                for (let r = 0; r < boardSize; r++) {
+                    for (let c = 0; c < boardSize; c++) {
+                        if (curBoard[r][c]?.owner === 'player') {
+                            const pMoves = getValidMoves(r, c, curBoard);
+                            if (pMoves.some(pm => pm.r === to.r && pm.c === to.c)) {
+                                threatened = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (threatened) break;
+                }
+
+                if (threatened) {
+                    score -= piece.isDamka ? 70 : 40;
+                }
+            }
+
+            return score;
+        };
+
+        // Sort moves by tactical evaluation
+        const sortedMoves = [...validMoves].sort((a, b) => 
+            evaluateAiMove(b, currentBoard) - evaluateAiMove(a, currentBoard)
+        );
+
+        let selectedCandidate = sortedMoves[0];
 
         // Validate attack target on current board
         if (selectedCandidate.to.isAttack) {
@@ -581,7 +678,7 @@ export function ToyCheckersModal({
                 return;
             } else {
                 // If attack target is no longer valid, fallback to first valid simple move
-                const fallbackMove = shuffledMoves.find(m => !m.to.isAttack && currentBoard[m.to.r]?.[m.to.c] === null);
+                const fallbackMove = sortedMoves.find(m => !m.to.isAttack && currentBoard[m.to.r]?.[m.to.c] === null);
                 if (fallbackMove) {
                     selectedCandidate = fallbackMove;
                 } else {

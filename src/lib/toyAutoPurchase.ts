@@ -294,6 +294,22 @@ export function getFigurineRequirement(activity: string, progress: WorldProgress
         };
     }
 
+    // 9. RPG Army Checkers (12 RPG Squads with 4 fighters each)
+    if (activity === 'rpg_army_checkers') {
+        const rpgSquads = progress.rpgArmyCheckersSquads || [];
+        const count = rpgSquads.length > 0 ? rpgSquads.length : 12;
+        return {
+            activity,
+            ready: true,
+            text: `Рольові Загони: ${count}/12 ⚔️🧙‍♂️`,
+            req: `12 рольових шашок-загонів`,
+            missingCount: 0,
+            missingCost: 0,
+            canAfford: true,
+            missingDescription: '12 рольових загонів готові до бою'
+        };
+    }
+
     return null;
 }
 

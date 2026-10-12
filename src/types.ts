@@ -510,7 +510,38 @@ export type TavernActivityType =
     | 'aranian_military_checkers'
     | 'tavern_labyrinth'
     | 'tavern_treasure_hunter'
-    | 'fantasy_adventure';
+    | 'fantasy_adventure'
+    | 'rpg_army_checkers';
+
+export type RpgFighterRole = 'warrior_1' | 'warrior_2' | 'mage' | 'cleric';
+
+export interface RpgSquadFighter {
+    id: string;
+    role: RpgFighterRole;
+    name: string;
+    level: number; // 0 to 4 (20 XP = lvl 1, 40 XP = lvl 2, 80 XP = lvl 3, 160 XP = lvl 4)
+    experience: number;
+    maxHp: number;
+    currentHp: number;
+    maxMp?: number;
+    currentMp?: number;
+    damage: number;
+    defense: number;
+    statPointsAvailable?: number;
+    bonusHp?: number;
+    bonusDamage?: number;
+    bonusDefense?: number;
+    isDead?: boolean; // if died during current checkers game, stays dead until end of match
+}
+
+export interface RpgArmyCheckersSquad {
+    id: string;
+    index: number; // 0 to 11 (12 checkers)
+    name: string;
+    avatar: string;
+    fighters: RpgSquadFighter[]; // strictly 4 fighters: 2 warriors, 1 mage, 1 cleric
+}
+
 
 export interface ToySoldier {
     id: string;
@@ -770,6 +801,7 @@ export interface WorldProgress {
     toySoldiers?: ToySoldier[]; // Player's collection of toy soldiers for the 15x15 tactical game
     toyRepairParts?: number; // Repair parts collected from recycling worn figurines (8 parts = 1 full repair of any figurine)
     armySquads?: ArmySquad[]; // Player's army squads for Grand Army Battles (16 squads needed for battle, 5 soldiers each)
+    rpgArmyCheckersSquads?: RpgArmyCheckersSquad[]; // Player's 12 squads for RPG Army Checkers (4 fighters each: 2 warriors, 1 mage, 1 cleric)
     guildInvestments?: any[]; // Active investments & commodity holdings in city merchant guilds
     guildReputation?: number; // Guild reputation points (levels up rank from Apprentice to Grand Magnate)
     guildTotalProfit?: number; // Total gold profits earned from trade and dividends

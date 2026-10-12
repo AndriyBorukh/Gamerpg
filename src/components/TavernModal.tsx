@@ -97,6 +97,7 @@ interface TavernModalProps {
     onChallengeToySoldiers?: (opponent: OpponentData) => void;
     onChallengeArmyBattle?: (opponent: OpponentData) => void;
     onChallengeCheckersWar?: (opponent: OpponentData, variant?: 'checkers_war' | 'aranian_checkers_war' | 'military_checkers' | 'aranian_military_checkers') => void;
+    onChallengeRpgArmyCheckers?: (opponent: OpponentData) => void;
     onChallengeToyCheckers?: (opponent: OpponentData, boardSize?: 8 | 10 | 12, movementMode?: 'combat' | 'checkers_classic') => void;
     onChallengeToyPawns?: (opponent: OpponentData, boardSize?: 8 | 10 | 12) => void;
     onChallengeWizardBattle?: (opponent: OpponentData) => void;
@@ -326,6 +327,17 @@ const RAW_ACTIVITIES: Omit<ActivityConfig, 'codeName'>[] = [
         btnColor: 'bg-gradient-to-r from-red-600 via-amber-600 to-yellow-500 hover:from-red-500 text-stone-950 font-black'
     },
     {
+        id: 'rpg_army_checkers',
+        label: 'Рольові армійські шашки',
+        icon: '⚔️🧙‍♂️👑',
+        themeColor: 'text-purple-400',
+        badgeBg: 'bg-purple-950/40 border-purple-500/40',
+        borderActive: 'border-purple-400 bg-[#281024]',
+        keeperQuote: '«Рольові армійські шашки: 12 загонів на 8х8 дошці! Кожен загін складається з 4 героїв — двох воїнів, мага та клірика. Бої проходять як у Фантастичних пригодах (G29)! Загиблі бійці вибувають до кінця гри. Прокачуйте бійців до 4-го рівня (20 → 40 → 80 → 160 XP) та відновлюйте полеглих у меню іграшок!»',
+        btnLabel: 'Зіграти в Рольові Армійські Шашки',
+        btnColor: 'bg-gradient-to-r from-purple-700 via-rose-600 to-amber-600 hover:from-purple-600 text-white font-black'
+    },
+    {
         id: 'checkers_war',
         label: 'Армійські шашки 8х8',
         icon: '⚔️🔴',
@@ -354,7 +366,7 @@ const RAW_ACTIVITIES: Omit<ActivityConfig, 'codeName'>[] = [
         themeColor: 'text-emerald-400',
         badgeBg: 'bg-emerald-950/40 border-emerald-500/40',
         borderActive: 'border-emerald-400 bg-[#0d2618]',
-        keeperQuote: '«Військові шашки: кожен загін — це армія зі 120 бійців! Хід за класичними шашковими правилами, а битва — через кидки монет: N атакуючих проти M захисників. Втрати = N - M. Загони прокачуються (перекидання монет атаки та захисту) та декомпресуються на 4 рівні!»',
+        keeperQuote: '«Військові шашки: кожен загін — це армія зі 120 бійців! Хід за класичними шашковими правилами, а битва — через кидки монет: атакуючий кидає монети за бійців, а загін захисту кидає монети на блок за кількістю отриманих попадань! Втрати — незаблоковані удари. Загони прокачуються та мають контратаку!»',
         btnLabel: 'Зіграти у Військові шашки (120 бійців)',
         btnColor: 'bg-gradient-to-r from-emerald-600 via-teal-600 to-amber-600 hover:from-emerald-500 text-white font-black'
     },
@@ -1083,6 +1095,7 @@ export function TavernModal({
     onChallengeToySoldiers,
     onChallengeArmyBattle,
     onChallengeCheckersWar,
+    onChallengeRpgArmyCheckers,
     onChallengeToyCheckers,
     onChallengeToyPawns,
     onChallengeWizardBattle,
@@ -1273,7 +1286,8 @@ export function TavernModal({
             aranian_checkers_war: 'аранійські армійські шашки (8x8)',
             military_checkers: 'військові шашки (120 бійців)',
             aranian_military_checkers: 'аранійські військові шашки (120 бійців)',
-            fantasy_adventure: 'фантастичні пригоди (JRPG бій)'
+            fantasy_adventure: 'фантастичні пригоди (JRPG бій)',
+            rpg_army_checkers: 'рольові армійські шашки (G29)'
         };
 
         const gameLabel = activityNames[activityType] || 'гру';
@@ -1958,6 +1972,8 @@ export function TavernModal({
             onChallengeToySoldiers(opp);
         } else if (activeActivity === 'army_battle' && onChallengeArmyBattle) {
             onChallengeArmyBattle(opp);
+        } else if (activeActivity === 'rpg_army_checkers' && onChallengeRpgArmyCheckers) {
+            onChallengeRpgArmyCheckers(opp);
         } else if ((activeActivity === 'checkers_war' || activeActivity === 'aranian_checkers_war' || activeActivity === 'military_checkers' || activeActivity === 'aranian_military_checkers') && onChallengeCheckersWar) {
             onChallengeCheckersWar(opp, activeActivity);
         } else if (activeActivity === 'toy_checkers' && onChallengeToyCheckers) {

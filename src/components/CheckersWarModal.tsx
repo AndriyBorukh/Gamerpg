@@ -11,8 +11,7 @@ import {
     createMilitarySquad,
     createStarterMilitarySquads12,
     applyMilitarySquadExpAndLevelUp,
-    getMilitarySquadPerkLabel,
-    getMilitarySquadReplenishCost
+    getMilitarySquadPerkLabel
 } from '../lib/toySoldiersData';
 import { playGoldSound, playLevelUpSound } from '../lib/soundEffects';
 import { saveWorldProgress } from '../lib/worldData';
@@ -491,8 +490,8 @@ export function CheckersWarModal({
             phase: 'ready',
             logs: [
                 `🪙 Початок битви монет: армії по 120 бійців!`,
-                `⚔️ 1. Основна атака: ${attackerSoldiers} монет на попадання vs ${defenderSoldiers} монет на захист (шанс 50%).`,
-                `⚡ 2. Контратака захисника: якщо захисник вціліє, він атакує у відповідь, а атакуючий захищається!`,
+                `⚔️ 1. Основна атака: ${attackerSoldiers} монет на попадання (за кількістю бійців). Захисник кине монети на блок за кожне влучання!`,
+                `⚡ 2. Контратака захисника: якщо захисник вціліє, він атакує у відповідь, а атакуючий захищається від влучань!`,
                 attackerLevel >= 1 ? `✨ Загін атаки має Рівень ${attackerLevel}: ПЕРЕКИДАННЯ промахів атаки!` : '',
                 defenderLevel >= 2 ? `✨ Загін захисту має Рівень ${defenderLevel}: ПЕРЕКИДАННЯ промахів захисту!` : ''
             ].filter(Boolean)
@@ -515,6 +514,7 @@ export function CheckersWarModal({
         // --------------------------------------------------------
         // ЕТАП 1: ОСНОВНА АТАКА (Атакуючий б'є -> Захисник захищається)
         // --------------------------------------------------------
+        // Атакуючий кидає монети за кожного свого бійця
         let initialAtkHits = 0;
         for (let i = 0; i < attackerSoldiers; i++) {
             if (Math.random() < 0.5) initialAtkHits++;
@@ -528,11 +528,13 @@ export function CheckersWarModal({
         }
         const totalAttackHits = initialAtkHits + rerollAtkHits;
 
+        // Загін, що захищається, кидає стільки монет, скільки попадань (а не скільки в нього бійців!)
+        const defenderCoins = totalAttackHits;
         let initialDefBlocks = 0;
-        for (let i = 0; i < defenderSoldiers; i++) {
+        for (let i = 0; i < defenderCoins; i++) {
             if (Math.random() < 0.5) initialDefBlocks++;
         }
-        const defMisses = defenderSoldiers - initialDefBlocks;
+        const defMisses = defenderCoins - initialDefBlocks;
         let rerollDefBlocks = 0;
         if (defenderLevel >= 2) {
             for (let i = 0; i < defMisses; i++) {
@@ -573,11 +575,12 @@ export function CheckersWarModal({
             }
             totalCounterHits = initialCounterHits + rerollCounterHits;
 
-            // Attacker defends against counter-attack with its soldiers
-            for (let i = 0; i < attackerSoldiers; i++) {
+            // Attacker defends against counter-attack: кидає монети за кількістю попадань контратаки!
+            const attackerDefCoins = totalCounterHits;
+            for (let i = 0; i < attackerDefCoins; i++) {
                 if (Math.random() < 0.5) initialAttackerBlocks++;
             }
-            const attDefMisses = attackerSoldiers - initialAttackerBlocks;
+            const attDefMisses = attackerDefCoins - initialAttackerBlocks;
             if (attackerLevel >= 2) { // Level 2 perk: defense coin reroll
                 for (let i = 0; i < attDefMisses; i++) {
                     if (Math.random() < 0.5) rerollAttackerBlocks++;
@@ -599,19 +602,19 @@ export function CheckersWarModal({
 
         const battleLogs = [
             `⚔️ [1. ОСНОВНА АТАКА] «${attackerSquadName}»: ${initialAtkHits} попадань${attackerLevel >= 1 ? ` (+${rerollAtkHits} перекид)` : ''} = ${totalAttackHits}.`,
-            `🛡️ [1. ЗАХИСТ] «${defenderSquadName}»: ${initialDefBlocks} блоків${defenderLevel >= 2 ? ` (+${rerollDefBlocks} перекид)` : ''} = ${totalDefBlocks}.`,
+            `🛡️ [1. ЗАХИСТ] «${defenderSquadName}» кидає ${defenderCoins} монет захисту (за попаданнями): ${initialDefBlocks} блоків${defenderLevel >= 2 ? ` (+${rerollDefBlocks} перекид)` : ''} = ${totalDefBlocks}.`,
             damage > 0 
                 ? `💥 Пошкодження захисника: -${defenderCasualties} бійців! (Вціліло: ${survivingDefenderSoldiers}/120)`
-                : `🛡️ Захисники відбили перший удар! Всі ${defenderSoldiers} бійців неушкоджені.`
+                : `🛡️ Захисники відбили всі удари! Всі ${defenderSoldiers} бійців неушкоджені.`
         ];
 
         if (hasCounterAttack) {
             battleLogs.push(
                 `⚡ [2. КОНТРАТАКА] Вцілілий захисник «${defenderSquadName}» (${survivingDefenderSoldiers} бійців) наносить контрудар: ${initialCounterHits} попадань${defenderLevel >= 1 ? ` (+${rerollCounterHits} перекид)` : ''} = ${totalCounterHits}!`,
-                `🛡️ [2. ЗАХИСТ АТАКУЮЧОГО] «${attackerSquadName}» захищається: ${initialAttackerBlocks} блоків${attackerLevel >= 2 ? ` (+${rerollAttackerBlocks} перекид)` : ''} = ${totalAttackerBlocks}.`,
+                `🛡️ [2. ЗАХИСТ АТАКУЮЧОГО] «${attackerSquadName}» кидає ${totalCounterHits} монет захисту (за попаданнями): ${initialAttackerBlocks} блоків${attackerLevel >= 2 ? ` (+${rerollAttackerBlocks} перекид)` : ''} = ${totalAttackerBlocks}.`,
                 counterDamage > 0
                     ? `🩸 Втрати атакуючого від контратаки: -${attackerCasualties} бійців! (Вціліло: ${survivingAttackerSoldiers}/120)`
-                    : `🛡️ Атакуючий повністю захистився від контратаки без втрат!`
+                    : `🛡️ Атакуючий повністю заблокував удари контратаки без втрат!`
             );
         } else {
             battleLogs.push(`💀 Загін «${defenderSquadName}» повністю знищено першим ударом — контратаку не нанесено!`);
@@ -872,61 +875,6 @@ export function CheckersWarModal({
         }
     };
 
-    // Replenish selected player squad for coins
-    const handleReplenishSelectedSquad = () => {
-        if (!selectedPiece || selectedPiece.side !== 'player') return;
-        const maxSoldiers = isCoinBattle ? 120 : (selectedPiece.squadRef.maxSoldiers || 12);
-        const currentCount = selectedPiece.soldierHps.length;
-        if (currentCount >= maxSoldiers) return;
-
-        const missing = maxSoldiers - currentCount;
-        const cost = isCoinBattle ? Math.ceil(missing / 2) : 40;
-        if (progress.playerGold < cost) {
-            addLog(`❌ Недостатньо монет для поповнення! Потрібно ${cost} монет.`);
-            return;
-        }
-
-        const maxHpVal = isCoinBattle ? 1 : (selectedPiece.maxSoldierHp || 3);
-        const newHps = Array(maxSoldiers).fill(maxHpVal);
-
-        const updatedToySoldiers = (progress.toySoldiers || []).map(s => {
-            if (s.id === selectedPiece.squadRef.id) {
-                return {
-                    ...s,
-                    soldiersCount: maxSoldiers,
-                    soldierHps: newHps
-                };
-            }
-            return s;
-        });
-
-        const updatedProg: WorldProgress = {
-            ...progress,
-            playerGold: progress.playerGold - cost,
-            toySoldiers: updatedToySoldiers
-        };
-
-        onUpdateProgress(updatedProg);
-        saveWorldProgress(updatedProg);
-
-        setGlobalSquads(prev => prev.map(s => {
-            if (s.id === selectedPiece.id) {
-                return {
-                    ...s,
-                    soldierHps: newHps,
-                    squadRef: {
-                        ...s.squadRef,
-                        soldiersCount: maxSoldiers,
-                        soldierHps: newHps
-                    }
-                };
-            }
-            return s;
-        }));
-
-        playGoldSound();
-        addLog(`✅ Загін «${selectedPiece.squadRef.name}» повністю відновлено до ${maxSoldiers} бійців за ${cost} монет!`);
-    };
 
     // Initiate Sub-Battle between Attacker and Defender
     const startSubBattle = (attacker: GlobalSquadPiece, defender: GlobalSquadPiece, targetRow: number, targetCol: number) => {
@@ -1139,7 +1087,36 @@ export function CheckersWarModal({
         });
 
         if (possibleJumps.length > 0) {
-            const choice = possibleJumps[Math.floor(Math.random() * possibleJumps.length)];
+            // Intelligent attack evaluation
+            const evaluateGlobalJump = (candidate: typeof possibleJumps[0]): number => {
+                let score = 30; // base attack reward
+                const { piece, move } = candidate;
+                const victim = currentSquads.find(s => s.id === move.victimId);
+                if (!victim) return score;
+
+                if (isCoinBattle) {
+                    const aiSoldiers = piece.squadRef.soldiersCount ?? 120;
+                    const victimSoldiers = victim.squadRef.soldiersCount ?? 120;
+                    // Prefer attacking with squad advantage
+                    score += Math.round((aiSoldiers - victimSoldiers) / 3);
+                    // Hunting weakened squads
+                    if (victimSoldiers <= 40) score += 25;
+                } else {
+                    const aiHp = piece.soldierHps.reduce((a, b) => a + b, 0);
+                    const victimHp = victim.soldierHps.reduce((a, b) => a + b, 0);
+                    score += (aiHp - victimHp) * 2;
+                    if (victim.soldierHps.length <= 3) score += 20;
+                }
+
+                if (victim.isKing) score += 25;
+                if (!piece.isKing && move.r === 7) score += 35; // Crown!
+                if (piece.isKing) score += 10;
+
+                return score;
+            };
+
+            const sortedJumps = [...possibleJumps].sort((a, b) => evaluateGlobalJump(b) - evaluateGlobalJump(a));
+            const choice = sortedJumps[0];
             const victim = currentSquads.find(s => s.id === choice.move.victimId);
             if (victim) {
                 if (isCoinBattle) {
@@ -1150,7 +1127,61 @@ export function CheckersWarModal({
                 return;
             }
         } else if (possibleSteps.length > 0) {
-            const choice = possibleSteps[Math.floor(Math.random() * possibleSteps.length)];
+            // Intelligent step evaluation: prefer crowning, advancement, center control, and avoiding blunders
+            const evaluateGlobalStep = (candidate: typeof possibleSteps[0]): number => {
+                let score = 0;
+                const { piece, move } = candidate;
+
+                // Crowning
+                if (!piece.isKing && move.r === 7) score += 50;
+
+                // Back rank defense (row 0)
+                if (piece.row === 0 && !piece.isKing) {
+                    const playerClose = currentSquads.some(s => s.side === 'player' && s.row <= 4);
+                    if (playerClose) score -= 18;
+                }
+
+                // Advance towards enemy line
+                if (!piece.isKing) {
+                    score += (move.r - piece.row) * 5;
+                } else {
+                    // Hunt nearest player squad
+                    let minDist = 99;
+                    currentSquads.forEach(s => {
+                        if (s.side === 'player') {
+                            const d = Math.abs(move.r - s.row) + Math.abs(move.c - s.col);
+                            if (d < minDist) minDist = d;
+                        }
+                    });
+                    score += Math.max(0, 16 - minDist);
+                }
+
+                // Center control
+                if (move.c >= 2 && move.c <= 5) score += 6;
+                if (move.c === 0 || move.c === 7) score += 3;
+
+                // TACTICAL SAFETY: Does moving here allow an immediate jump/attack by any player squad?
+                const simSquads = currentSquads.map(s => s.id === piece.id ? { ...s, row: move.r, col: move.c, isKing: piece.isKing || move.r === 7 } : s);
+                let canBeAttacked = false;
+                for (const pSquad of simSquads) {
+                    if (pSquad.side === 'player') {
+                        const pMoves = getValidGlobalMoves(pSquad, simSquads);
+                        if (pMoves.some(pm => pm.victimId === piece.id)) {
+                            canBeAttacked = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (canBeAttacked) {
+                    score -= piece.isKing ? 70 : 45;
+                }
+
+                return score;
+            };
+
+            const sortedSteps = [...possibleSteps].sort((a, b) => evaluateGlobalStep(b) - evaluateGlobalStep(a));
+            const choice = sortedSteps[0];
             const isKing = choice.piece.isKing || choice.move.r === 7;
 
             const updated = currentSquads.map(s => s.id === choice.piece.id ? {
@@ -1250,7 +1281,23 @@ export function CheckersWarModal({
         let defHps = [...currentSub.defenderSoldierHps];
 
         if (allJumps.length > 0) {
-            const choice = allJumps[Math.floor(Math.random() * allJumps.length)];
+            // Intelligent tactical jump evaluation
+            const promoRow = aiSide === 'attacker' ? 0 : 7;
+            const evaluateTacticalJump = (candidate: typeof allJumps[0]): number => {
+                let score = 30;
+                const { piece, move } = candidate;
+                const victim = currentPieces.find(p => p.id === move.victimId);
+                if (victim) {
+                    const victimCurrentHp = victim.side === 'attacker' ? attHps[victim.soldierIndex] : defHps[victim.soldierIndex];
+                    if (victimCurrentHp <= 1) score += 30; // Permanent kill!
+                    if (victim.isKing) score += 20;
+                }
+                if (!piece.isKing && move.r === promoRow) score += 35; // Crowning
+                return score;
+            };
+
+            const sortedJumps = [...allJumps].sort((a, b) => evaluateTacticalJump(b) - evaluateTacticalJump(a));
+            const choice = sortedJumps[0];
             const victim = currentPieces.find(p => p.id === choice.move.victimId);
 
             if (victim) {
@@ -1319,7 +1366,53 @@ export function CheckersWarModal({
             }
 
         } else if (allSteps.length > 0) {
-            const choice = allSteps[Math.floor(Math.random() * allSteps.length)];
+            const promoRow = aiSide === 'attacker' ? 0 : 7;
+            const enemySide = aiSide === 'attacker' ? 'defender' : 'attacker';
+
+            const evaluateTacticalStep = (candidate: typeof allSteps[0]): number => {
+                let score = 0;
+                const { piece, move } = candidate;
+
+                // Crowning
+                if (!piece.isKing && move.r === promoRow) score += 45;
+
+                // Advancement
+                const advance = aiSide === 'attacker' ? (piece.row - move.r) : (move.r - piece.row);
+                if (!piece.isKing) score += advance * 4;
+
+                // Center control
+                if (move.c >= 2 && move.c <= 5) score += 5;
+                if (move.c === 0 || move.c === 7) score += 3;
+
+                // Base rank defense
+                const baseRow = aiSide === 'attacker' ? 7 : 0;
+                if (piece.row === baseRow && !piece.isKing) {
+                    const enemyClose = currentPieces.some(p => p.side === enemySide && (aiSide === 'attacker' ? p.row >= 3 : p.row <= 4));
+                    if (enemyClose) score -= 15;
+                }
+
+                // TACTICAL SAFETY: Does this step walk into a jump by player?
+                const simPieces = currentPieces.map(p => p.id === piece.id ? { ...p, row: move.r, col: move.c, isKing: p.isKing || move.r === promoRow } : p);
+                let walksIntoJump = false;
+                for (const ep of simPieces) {
+                    if (ep.side === enemySide) {
+                        const enemyMoves = getValidTacticalMoves(ep, simPieces);
+                        if (enemyMoves.some(em => em.isJump && em.victimId === piece.id)) {
+                            walksIntoJump = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (walksIntoJump) {
+                    score -= piece.isKing ? 70 : 40;
+                }
+
+                return score;
+            };
+
+            const sortedSteps = [...allSteps].sort((a, b) => evaluateTacticalStep(b) - evaluateTacticalStep(a));
+            const choice = sortedSteps[0];
             let updated = currentPieces.map(p => {
                 if (p.id === choice.piece.id) {
                     return {
@@ -1980,17 +2073,12 @@ export function CheckersWarModal({
                                         )}
                                     </div>
 
-                                    {/* Replenish button for damaged player squad */}
+                                    {/* Notice for damaged player squad - no replenishment allowed during match */}
                                     {selectedPiece.side === 'player' && selectedPiece.soldierHps.length < (isCoinBattle ? 120 : (selectedPiece.squadRef.maxSoldiers || 12)) && (
-                                        <button
-                                            onClick={handleReplenishSelectedSquad}
-                                            className="w-full py-1.5 px-2 bg-gradient-to-r from-emerald-700 to-teal-600 hover:from-emerald-600 text-white font-bold rounded-lg text-[11px] flex items-center justify-center gap-1 shadow-md cursor-pointer transition"
-                                        >
-                                            <Coins className="w-3.5 h-3.5" />
-                                            <span>
-                                                Відновити загін ({isCoinBattle ? `${Math.ceil((120 - selectedPiece.soldierHps.length) / 2)} з.` : '40 з.'})
-                                            </span>
-                                        </button>
+                                        <div className="w-full py-1.5 px-2 bg-stone-900/80 border border-stone-800 text-stone-400 font-medium rounded-lg text-[10px] flex items-center justify-center gap-1.5 text-center">
+                                            <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                                            <span>Поранені бійці (відновлення лише в Майстерні поза партією)</span>
+                                        </div>
                                     )}
 
                                     <p className="text-[10px] text-stone-400">
@@ -2328,7 +2416,7 @@ export function CheckersWarModal({
                                                     {activeCoinBattle.defenderSquadName}
                                                 </div>
                                                 <div className="text-xs font-mono font-bold text-blue-300">
-                                                    M = {activeCoinBattle.defenderSoldiers} / 120 бійців (монет)
+                                                    Склад: {activeCoinBattle.defenderSoldiers} / 120 бійців
                                                 </div>
                                             </div>
                                         </div>
@@ -2352,18 +2440,18 @@ export function CheckersWarModal({
                                                 <span>Правила битви монет із обов'язковою контратакою:</span>
                                             </div>
                                             <p className="text-stone-300">
-                                                1. ⚔️ <b>Основна атака:</b> Атакуючий кидає <span className="text-amber-300 font-bold font-mono">{activeCoinBattle.attackerSoldiers}</span> монет на влучання (50% шанс).
+                                                1. ⚔️ <b>Основна атака:</b> Атакуючий кидає <span className="text-amber-300 font-bold font-mono">{activeCoinBattle.attackerSoldiers}</span> монет на влучання (за кількістю бійців, 50% шанс).
                                                 {activeCoinBattle.attackerLevel >= 1 ? ' Завдяки 1+★ промахи перекидаються!' : ''}
                                             </p>
                                             <p className="text-stone-300">
-                                                2. 🛡️ <b>Захист першого удару:</b> Захисник кидає <span className="text-blue-300 font-bold font-mono">{activeCoinBattle.defenderSoldiers}</span> монет на блок (50% шанс).
+                                                2. 🛡️ <b>Захист першого удару:</b> Загін захисника кидає <b>стільки монет, скільки влучань</b> завдала атака (50% шанс блоку на кожне влучання).
                                                 {activeCoinBattle.defenderLevel >= 2 ? ' Завдяки 2+★ невдалі блоки перекидаються!' : ''}
                                             </p>
                                             <p className="text-stone-300">
-                                                3. 🩸 <b>Втрати захисника:</b> N - M пошкоджень (якщо влучань більше ніж блоків).
+                                                3. 🩸 <b>Втрати захисника:</b> різниця між влучаннями та блоками (незаблоковані удари знищують бійців).
                                             </p>
                                             <p className="text-emerald-300 font-semibold bg-emerald-950/40 p-2 rounded-lg border border-emerald-600/40">
-                                                4. ⚡ <b>Обов'язкова Контратака Захисника:</b> якщо у захисника вижив хоча б один боєць, вони наносять контрудар усіма вцілілими монетами, а атакуючий загін кидає монети на захист!
+                                                4. ⚡ <b>Обов'язкова Контратака Захисника:</b> якщо вижив хоча б один захисник, він наносить контрудар (монети за вцілілих бійців), а атакуючий загін кидає монети на блок за кількістю отриманих влучань!
                                             </p>
                                         </div>
 
@@ -2405,7 +2493,7 @@ export function CheckersWarModal({
                                                 <div className="p-2 rounded-lg bg-blue-950/40 border border-blue-500/30 text-center">
                                                     <div className="text-[10px] text-stone-400">Блоків Захисника ({activeCoinBattle.defenderSquadName})</div>
                                                     <div className="text-xl font-black font-mono text-blue-300">
-                                                        {activeCoinBattle.totalDefBlocks}
+                                                        {activeCoinBattle.totalDefBlocks} <span className="text-xs text-blue-400/80">/ {activeCoinBattle.totalAttackHits}</span>
                                                     </div>
                                                     <div className="text-[9px] text-stone-400">
                                                         {activeCoinBattle.initialDefBlocks} базових {activeCoinBattle.rerollDefBlocks ? `+ ${activeCoinBattle.rerollDefBlocks} перекид` : ''}
@@ -2445,7 +2533,7 @@ export function CheckersWarModal({
                                                         <div className="p-2 rounded-lg bg-amber-950/40 border border-amber-500/30 text-center">
                                                             <div className="text-[10px] text-amber-400">Блоки Атакуючого ({activeCoinBattle.attackerSquadName})</div>
                                                             <div className="text-xl font-black font-mono text-amber-300">
-                                                                {activeCoinBattle.totalAttackerBlocks}
+                                                                {activeCoinBattle.totalAttackerBlocks} <span className="text-xs text-amber-400/80">/ {activeCoinBattle.totalCounterHits}</span>
                                                             </div>
                                                             <div className="text-[9px] text-stone-400">
                                                                 {activeCoinBattle.initialAttackerBlocks} базових {activeCoinBattle.rerollAttackerBlocks ? `+ ${activeCoinBattle.rerollAttackerBlocks} перекид` : ''}

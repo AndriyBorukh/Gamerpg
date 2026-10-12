@@ -21,10 +21,20 @@ import {
     getMilitarySquadDecompressionCount,
     DecompressOptions
 } from '../lib/toySoldiersData';
+import { 
+    createStarterRpgSquads, 
+    upgradeRpgFighterStat, 
+    reviveRpgFighter, 
+    calculateRpgFighterLevel, 
+    getRpgNextLevelExpThreshold,
+    addExpToRpgFighter,
+    getBaseFighterStats
+} from '../lib/rpgArmyCheckersData';
+import { RpgArmyCheckersSquad, RpgSquadFighter } from '../types';
 import { DecompressChoiceModal, DecompressUnitInfo } from './DecompressChoiceModal';
 import { ToySoldierFigurine } from './ToySoldierFigurine';
 import { saveWorldProgress } from '../lib/worldData';
-import { playGoldSound, playLevelUpSound } from '../lib/soundEffects';
+import { playGoldSound, playLevelUpSound, playSparkleSound } from '../lib/soundEffects';
 import { 
     ShoppingBag, 
     X, 
@@ -60,7 +70,7 @@ export function ToyShopModal({
     onUpdateProgress,
     onOpenDecompressionMaster
 }: ToyShopModalProps) {
-    const [selectedTab, setSelectedTab] = useState<'shop' | 'checkers_squads' | 'army_squads' | 'my_army'>('shop');
+    const [selectedTab, setSelectedTab] = useState<'shop' | 'rpg_checkers' | 'checkers_squads' | 'army_squads' | 'my_army'>('shop');
     const [shopCategory, setShopCategory] = useState<'all' | 'checkers_squads' | 'soldiers' | 'tokens' | 'cards'>('all');
     const [actionMessage, setActionMessage] = useState<string | null>(null);
     const [decompressedCompanions, setDecompressedCompanions] = useState<HiredCompanion[] | null>(null);
@@ -76,6 +86,9 @@ export function ToyShopModal({
     const armySquads: ArmySquad[] = progress.armySquads || [];
     const checkersSquads = soldiers.filter(s => (s.isCheckersSquad || s.type === 'шашка_загін') && (s.deaths || 0) < 3);
     const militarySquads = soldiers.filter(s => (s.isMilitarySquad || s.type === 'військова_шашка_загін') && (s.deaths || 0) < 3);
+    const rpgSquads: RpgArmyCheckersSquad[] = progress.rpgArmyCheckersSquads && progress.rpgArmyCheckersSquads.length === 12
+        ? progress.rpgArmyCheckersSquads
+        : createStarterRpgSquads();
     const hasMinSoldiers = soldiers.length >= 5;
     const hasEnoughArmySquads = armySquads.length >= 16;
     const hasLvl4Soldier = soldiers.some(s => s.level >= 4);
@@ -460,6 +473,107 @@ export function ToyShopModal({
         showNotification('Солдатика списано з вашої колекції.');
     };
 
+    const handleUpgradeRpgFighterStat = (squadId: string, fighterId: string, stat: 'hp' | 'damage' | 'defense') => {
+        const updatedSquads = rpgSquads.map(sq => {
+            if (sq.id === squadId) {
+                return {
+                    ...sq,
+                    fighters: sq.fighters.map(f => {
+                        if (f.id === fighterId) {
+                            return upgradeRpgFighterStat(f, stat);
+                        }
+                        return f;
+                    })
+                };
+            }
+            return sq;
+        });
+
+        const updatedProgress: WorldProgress = {
+            ...progress,
+            rpgArmyCheckersSquads: updatedSquads
+        };
+        playLevelUpSound();
+        onUpdateProgress(updatedProgress);
+        saveWorldProgress(updatedProgress);
+        showNotification('✅ Характеристику бійця успішно збільшено!');
+    };
+
+    const handleReviveRpgFighter = (squadId: string, fighterId: string) => {
+        const updatedSquads = rpgSquads.map(sq => {
+            if (sq.id === squadId) {
+                return {
+                    ...sq,
+                    fighters: sq.fighters.map(f => {
+                        if (f.id === fighterId) {
+                            return reviveRpgFighter(f);
+                        }
+                        return f;
+                    })
+                };
+            }
+            return sq;
+        });
+
+        const updatedProgress: WorldProgress = {
+            ...progress,
+            rpgArmyCheckersSquads: updatedSquads
+        };
+        playSparkleSound();
+        onUpdateProgress(updatedProgress);
+        saveWorldProgress(updatedProgress);
+        showNotification('✨ Бійця відновлено до лав загону на 0-й рівень!');
+    };
+
+    const handleTrainRpgFighter = (squadId: string, fighterId: string) => {
+        const cost = 15;
+        if (progress.playerGold < cost) {
+            showNotification(`Недостатньо золота! Потрібно ${cost} монет для тренування.`);
+            return;
+        }
+
+        let leveledUpMsg = false;
+        const updatedSquads = rpgSquads.map(sq => {
+            if (sq.id === squadId) {
+                return {
+                    ...sq,
+                    fighters: sq.fighters.map(f => {
+                        if (f.id === fighterId) {
+                            const res = addExpToRpgFighter(f, 20);
+                            if (res.leveledUp) leveledUpMsg = true;
+                            return res.fighter;
+                        }
+                        return f;
+                    })
+                };
+            }
+            return sq;
+        });
+
+        const updatedProgress: WorldProgress = {
+            ...progress,
+            playerGold: progress.playerGold - cost,
+            rpgArmyCheckersSquads: updatedSquads
+        };
+        playGoldSound();
+        if (leveledUpMsg) playLevelUpSound();
+        onUpdateProgress(updatedProgress);
+        saveWorldProgress(updatedProgress);
+        showNotification(`🏋️ Бійця натреновано (+20 XP)!${leveledUpMsg ? ' Новий рівень отримано!' : ''}`);
+    };
+
+    const handleRecruitStarterRpgSquads = () => {
+        const starter = createStarterRpgSquads();
+        const updatedProgress: WorldProgress = {
+            ...progress,
+            rpgArmyCheckersSquads: starter
+        };
+        playLevelUpSound();
+        onUpdateProgress(updatedProgress);
+        saveWorldProgress(updatedProgress);
+        showNotification('⚔️ Отримано повний набір 12 рольових шашок-загонів!');
+    };
+
     return (
         <AnimatePresence>
             <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-5">
@@ -534,6 +648,21 @@ export function ToyShopModal({
                         >
                             <ShoppingBag className="w-4 h-4" />
                             <span>Магазин Фігурок</span>
+                        </button>
+
+                        <button
+                            onClick={() => setSelectedTab('rpg_checkers')}
+                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                                selectedTab === 'rpg_checkers'
+                                    ? 'bg-gradient-to-r from-purple-600/30 via-red-600/30 to-amber-600/30 text-amber-300 border border-amber-500/50 shadow-sm'
+                                    : 'text-stone-400 hover:text-stone-200 bg-stone-900/50'
+                            }`}
+                        >
+                            <Swords className="w-4 h-4 text-purple-400" />
+                            <span>Рольові Шашки-Загони (G29)</span>
+                            <span className="px-1.5 py-0.2 rounded-full bg-stone-950 text-[10px] text-amber-300 font-mono border border-stone-800">
+                                {rpgSquads.length}/12
+                            </span>
                         </button>
 
                         <button
@@ -753,6 +882,230 @@ export function ToyShopModal({
                                                     <Coins className="w-3.5 h-3.5" />
                                                     <span>{item.cost} з.</span>
                                                 </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ) : selectedTab === 'rpg_checkers' ? (
+                            <div className="space-y-4">
+                                {/* Banner */}
+                                <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-950/80 via-stone-900 to-amber-950/80 border-2 border-amber-500/70 shadow-xl flex flex-wrap items-center justify-between gap-4">
+                                    <div className="space-y-1.5 max-w-xl">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-2xl">⚔️🧙‍♂️✨</span>
+                                            <h4 className="font-black text-amber-200 font-serif text-base">
+                                                Рольові Шашки-Загони (12 шашок • по 4 бійці кожна)
+                                            </h4>
+                                        </div>
+                                        <p className="text-xs text-stone-300 leading-relaxed">
+                                            Кожен загін для Рольових армійських шашок складається з 4 героїв: 
+                                            <span className="text-amber-300 font-bold"> двох воїнів, мага та клірика</span>. 
+                                            Бої проходять у покроковому JRPG стилі (як у G29). Загиблі під час гри бійці зникають до кінця матчу. 
+                                            Тут ви можете <span className="text-emerald-300 font-bold">прокачувати бійців (від 0 до 4 рівня, поріг: 20 → 40 → 80 → 160 XP)</span> або <span className="text-amber-300 font-bold">відновлювати полеглих</span> (відновлений боєць буде 0-го рівня).
+                                        </p>
+                                    </div>
+
+                                    <div className="flex flex-col gap-2">
+                                        {(!progress.rpgArmyCheckersSquads || progress.rpgArmyCheckersSquads.length < 12) && (
+                                            <button
+                                                onClick={handleRecruitStarterRpgSquads}
+                                                className="px-4 py-2 bg-gradient-to-r from-amber-600 to-yellow-500 hover:from-amber-500 text-stone-950 font-black rounded-xl text-xs flex items-center gap-2 shadow-lg cursor-pointer transition-all"
+                                            >
+                                                <Sparkles className="w-4 h-4" />
+                                                <span>Отримати 12 шашок-загонів</span>
+                                            </button>
+                                        )}
+                                        <div className="px-3 py-1 bg-black/60 border border-purple-500/50 rounded-xl text-[11px] text-purple-200 font-mono text-center">
+                                            В строю: {rpgSquads.length}/12 загонів
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Squads List */}
+                                <div className="space-y-4">
+                                    {rpgSquads.map((sq, sqIdx) => {
+                                        const livingFighters = sq.fighters.filter(f => !f.isDead && f.currentHp > 0);
+                                        return (
+                                            <div 
+                                                key={sq.id || sqIdx} 
+                                                className="p-4 rounded-2xl bg-[#140e14] border border-purple-900/40 shadow-lg space-y-3"
+                                            >
+                                                {/* Squad Header */}
+                                                <div className="flex flex-wrap items-center justify-between pb-2 border-b border-stone-800 gap-2">
+                                                    <div className="flex items-center gap-2.5">
+                                                        <span className="text-2xl p-1.5 bg-stone-900 rounded-xl border border-stone-800">
+                                                            {sq.avatar}
+                                                        </span>
+                                                        <div>
+                                                            <h5 className="font-bold text-sm text-amber-200 font-serif">
+                                                                {sq.name}
+                                                            </h5>
+                                                            <div className="text-[10px] text-stone-400">
+                                                                Шашка #{sq.index !== undefined ? sq.index + 1 : sqIdx + 1} на дошці 8х8
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <span className={`text-xs font-black px-2.5 py-1 rounded-full border ${
+                                                        livingFighters.length === 4 
+                                                            ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60'
+                                                            : livingFighters.length > 0
+                                                                ? 'bg-amber-950/80 text-amber-300 border-amber-700/60'
+                                                                : 'bg-red-950/80 text-red-300 border-red-700/60'
+                                                    }`}>
+                                                        {livingFighters.length}/4 бійців в строю
+                                                    </span>
+                                                </div>
+
+                                                {/* 4 Fighters Grid */}
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                    {sq.fighters.map(fighter => {
+                                                        const isDead = fighter.isDead || fighter.currentHp <= 0;
+                                                        const thresholdInfo = getRpgNextLevelExpThreshold(fighter.experience);
+                                                        const nextThresh = thresholdInfo.nextThreshold;
+                                                        const prevThresh = fighter.level > 0 ? 20 * Math.pow(2, fighter.level - 1) : 0;
+                                                        const progressPercent = fighter.level >= 4 
+                                                            ? 100 
+                                                            : Math.min(100, Math.max(0, ((fighter.experience - prevThresh) / (nextThresh - prevThresh)) * 100));
+
+                                                        return (
+                                                            <div 
+                                                                key={fighter.id}
+                                                                className={`p-3 rounded-xl border flex flex-col justify-between gap-2.5 transition-all ${
+                                                                    isDead 
+                                                                        ? 'bg-red-950/20 border-red-900/50' 
+                                                                        : 'bg-stone-950/60 border-stone-800 hover:border-purple-600/50'
+                                                                }`}
+                                                            >
+                                                                {/* Fighter info top */}
+                                                                <div className="flex items-start justify-between gap-2">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="text-xl">
+                                                                            {isDead ? '🪦' : getBaseFighterStats(fighter.role).avatar}
+                                                                        </span>
+                                                                        <div>
+                                                                            <div className="font-bold text-xs text-stone-200 flex items-center gap-1.5">
+                                                                                <span>{fighter.name}</span>
+                                                                                <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono font-bold ${
+                                                                                    fighter.level >= 4 ? 'bg-amber-500 text-stone-950' : 'bg-stone-800 text-amber-400'
+                                                                                }`}>
+                                                                                    {fighter.level}★ Рів.
+                                                                                </span>
+                                                                            </div>
+                                                                            <div className="text-[10px] text-stone-400">
+                                                                                {getBaseFighterStats(fighter.role).description}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {isDead ? (
+                                                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-red-950 text-red-300 border border-red-800 whitespace-nowrap">
+                                                                            Поліг у бою
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 whitespace-nowrap">
+                                                                            В строю
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+
+                                                                {/* XP Bar */}
+                                                                <div className="space-y-1">
+                                                                    <div className="flex justify-between text-[10px] text-stone-400 font-mono">
+                                                                        <span>Досвід (XP):</span>
+                                                                        <span className="text-amber-300 font-bold">
+                                                                            {fighter.experience} {fighter.level < 4 ? `/ ${nextThresh} XP` : '(МАКС 4 РІВ)'}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="w-full h-1.5 bg-stone-900 rounded-full overflow-hidden border border-stone-800">
+                                                                        <div 
+                                                                            className="h-full bg-gradient-to-r from-purple-500 to-amber-500 transition-all duration-300"
+                                                                            style={{ width: `${progressPercent}%` }}
+                                                                        />
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Stats Bar */}
+                                                                <div className={`grid ${fighter.maxMp ? 'grid-cols-4' : 'grid-cols-3'} gap-1.5 text-center text-[10px] bg-stone-900/60 p-1.5 rounded-lg border border-stone-800 font-mono`}>
+                                                                    <div className="text-red-300">
+                                                                        <span className="block text-[8px] text-stone-500 uppercase font-sans">HP</span>
+                                                                        {fighter.currentHp}/{fighter.maxHp}
+                                                                    </div>
+                                                                    {fighter.maxMp ? (
+                                                                        <div className="text-sky-300">
+                                                                            <span className="block text-[8px] text-stone-500 uppercase font-sans">MP</span>
+                                                                            {fighter.currentMp ?? fighter.maxMp}/{fighter.maxMp}
+                                                                        </div>
+                                                                    ) : null}
+                                                                    <div className="text-amber-300">
+                                                                        <span className="block text-[8px] text-stone-500 uppercase font-sans">АТК</span>
+                                                                        {fighter.damage}
+                                                                    </div>
+                                                                    <div className="text-blue-300">
+                                                                        <span className="block text-[8px] text-stone-500 uppercase font-sans">ЗАХ</span>
+                                                                        {fighter.defense}
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Action Buttons */}
+                                                                <div className="pt-1 flex flex-wrap gap-1.5">
+                                                                    {isDead ? (
+                                                                        <button
+                                                                            onClick={() => handleReviveRpgFighter(sq.id, fighter.id)}
+                                                                            className="w-full py-1.5 px-2 bg-gradient-to-r from-red-700 via-rose-700 to-amber-700 hover:from-red-600 text-white font-bold text-[11px] rounded-lg transition-all shadow-md cursor-pointer flex items-center justify-center gap-1.5"
+                                                                        >
+                                                                            <Sparkles className="w-3.5 h-3.5" />
+                                                                            <span>Відновити бійця (скидання на 0-й рівень)</span>
+                                                                        </button>
+                                                                    ) : (
+                                                                        <>
+                                                                            {(fighter.statPointsAvailable || 0) > 0 ? (
+                                                                                <div className="w-full space-y-1">
+                                                                                    <div className="text-[10px] text-amber-300 font-bold text-center">
+                                                                                        ⭐ Доступно покращень: {fighter.statPointsAvailable}
+                                                                                    </div>
+                                                                                    <div className="grid grid-cols-3 gap-1">
+                                                                                        <button
+                                                                                            onClick={() => handleUpgradeRpgFighterStat(sq.id, fighter.id, 'hp')}
+                                                                                            className="py-1 px-1.5 bg-red-950/80 hover:bg-red-900 border border-red-700 text-red-200 text-[10px] font-bold rounded cursor-pointer"
+                                                                                            title="Додати +6 до максимального здоров'я"
+                                                                                        >
+                                                                                            +6 HP
+                                                                                        </button>
+                                                                                        <button
+                                                                                            onClick={() => handleUpgradeRpgFighterStat(sq.id, fighter.id, 'damage')}
+                                                                                            className="py-1 px-1.5 bg-amber-950/80 hover:bg-amber-900 border border-amber-700 text-amber-200 text-[10px] font-bold rounded cursor-pointer"
+                                                                                            title="Додати +2 до пошкодження"
+                                                                                        >
+                                                                                            +2 АТК
+                                                                                        </button>
+                                                                                        <button
+                                                                                            onClick={() => handleUpgradeRpgFighterStat(sq.id, fighter.id, 'defense')}
+                                                                                            className="py-1 px-1.5 bg-blue-950/80 hover:bg-blue-900 border border-blue-700 text-blue-200 text-[10px] font-bold rounded cursor-pointer"
+                                                                                            title="Додати +1 до захисту"
+                                                                                        >
+                                                                                            +1 ЗАХ
+                                                                                        </button>
+                                                                                    </div>
+                                                                                </div>
+                                                                            ) : (
+                                                                                fighter.level < 4 && (
+                                                                                    <button
+                                                                                        onClick={() => handleTrainRpgFighter(sq.id, fighter.id)}
+                                                                                        className="w-full py-1 px-2 bg-stone-900 hover:bg-stone-800 border border-amber-600/40 text-amber-300 font-bold text-[10px] rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                                                                                    >
+                                                                                        <span>🏋️ Посилене тренування (+20 XP • 15 з.)</span>
+                                                                                    </button>
+                                                                                )
+                                                                            )}
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
                                         );
                                     })}
@@ -1081,7 +1434,7 @@ export function ToyShopModal({
                                     ) : (
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                             {armySquads.map((sq, idx) => {
-                                                const isReadyToDecompress = (sq.level >= 4 || sq.experience >= 20);
+                                                const isReadyToDecompress = (sq.level >= 4 || ((sq as any).isMilitarySquad || (sq as any).isCheckersSquad || sq.type?.includes('шашк') ? (sq.experience || 0) >= 160 : (sq.experience || 0) >= 20));
                                                 const alive = sq.soldiersCount ?? 5;
                                                 return (
                                                     <div 
@@ -1180,7 +1533,7 @@ export function ToyShopModal({
                                                                         Рівень {cs.level}★ ({cs.experience || 0} XP) • {cs.maxHp || 3} HP/боєць
                                                                     </div>
                                                                     <div className="text-[10px] text-amber-300/90 font-medium">
-                                                                        {cs.level >= 4 ? '👑 Доступна декомпресія' : `До 4-го рівня: ${Math.max(0, 20 - (cs.experience || 0))} XP`}
+                                                                        {cs.level >= 4 ? '👑 Доступна декомпресія' : `До 4-го рівня: ${Math.max(0, 160 - (cs.experience || 0))} XP (1-й рівень = 20 XP, далі поріг ×2)`}
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -1355,7 +1708,7 @@ export function ToyShopModal({
                                                                     )}
                                                                 </h4>
                                                                 <div className="text-[11px] text-[#a89988]">
-                                                                    Рівень: <span className="text-amber-300 font-bold">{soldier.level}</span> • Досвід: <span className="text-amber-300 font-bold">{soldier.experience} XP</span> (кожні 10 XP = +1 Рівень)
+                                                                    Рівень: <span className="text-amber-300 font-bold">{soldier.level}</span> • Досвід: <span className="text-amber-300 font-bold">{soldier.experience} XP</span> (1-й рівень = 20 XP, поріг ×2)
                                                                 </div>
                                                             </div>
                                                         </div>

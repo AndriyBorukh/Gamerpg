@@ -392,17 +392,103 @@ export default function CheckersModal({
                 return;
             }
 
-            // AI heuristic: prioritize jump captures, then king promotions, then center control
-            legalMoves.sort((a, b) => {
-                if (a.isJump && !b.isJump) return -1;
-                if (!a.isJump && b.isJump) return 1;
-                // Prefer crowning moves
-                const aCrowns = a.to.r === 7 ? 1 : 0;
-                const bCrowns = b.to.r === 7 ? 1 : 0;
-                if (aCrowns !== bCrowns) return bCrowns - aCrowns;
-                // Prefer advancing
-                return (b.to.r - b.from.r) - (a.to.r - a.from.r);
-            });
+            // AI Smart Heuristic: evaluate captures, king promotion, tactical safety, and board control
+            const evaluateAiMove = (m: Move, currentBoard: BoardState): number => {
+                let score = 0;
+                const simBoard: BoardState = currentBoard.map(row => [...row]);
+                const piece = simBoard[m.from.r][m.from.c]!;
+                simBoard[m.from.r][m.from.c] = null;
+                simBoard[m.to.r][m.to.c] = piece;
+
+                const movingPiece = { ...piece };
+
+                if (m.isJump) {
+                    score += 35; // Base capture value
+                    if (m.captured) {
+                        const cap = simBoard[m.captured.r][m.captured.c];
+                        if (cap?.isKing) score += 30; // Capture enemy King!
+                        simBoard[m.captured.r][m.captured.c] = null;
+                    }
+
+                    // Check king promotion
+                    if (!movingPiece.isKing && m.to.r === 7) {
+                        movingPiece.isKing = true;
+                        score += 50; // Crowning bonus
+                    } else if (!movingPiece.isKing) {
+                        // Check for combo chain jumps
+                        const chainJumps = getMovesForPiece(simBoard, m.to).filter(cm => cm.isJump);
+                        if (chainJumps.length > 0) {
+                            score += chainJumps.length * 35; // Huge bonus for chain multi-jump
+                        }
+                    }
+                } else {
+                    // Simple move
+                    if (!movingPiece.isKing && m.to.r === 7) {
+                        score += 45; // Promote to King!
+                    }
+
+                    // Protect back rank (row 0) from premature vacating
+                    if (m.from.r === 0 && !piece.isKing) {
+                        const playerAdvancing = simBoard.some((row, rIdx) => 
+                            rIdx <= 4 && row.some(p => p && p.owner === 'player')
+                        );
+                        if (playerAdvancing) score -= 18;
+                    }
+
+                    // Center control
+                    if (m.to.c >= 2 && m.to.c <= 5) score += 6;
+                    if (m.to.r >= 3 && m.to.r <= 5) score += 5;
+
+                    // Edge safety
+                    if (m.to.c === 0 || m.to.c === 7) score += 4;
+
+                    // Advancement for men
+                    if (!piece.isKing) {
+                        score += (m.to.r - m.from.r) * 4;
+                    } else {
+                        // King moves towards closest player piece
+                        let minDist = 99;
+                        for (let r = 0; r < 8; r++) {
+                            for (let c = 0; c < 8; c++) {
+                                if (simBoard[r][c]?.owner === 'player') {
+                                    const dist = Math.abs(m.to.r - r) + Math.abs(m.to.c - c);
+                                    if (dist < minDist) minDist = dist;
+                                }
+                            }
+                        }
+                        score += Math.max(0, 16 - minDist);
+                    }
+                }
+
+                // TACTICAL SAFETY CHECK: What can player counter-attack on their turn?
+                const playerCounterMoves = getAllLegalMoves(simBoard, 'player');
+                const playerJumps = playerCounterMoves.filter(pm => pm.isJump);
+
+                if (playerJumps.length > 0) {
+                    // Player has mandatory jump!
+                    const capturesOurMovedPiece = playerJumps.some(pm => 
+                        pm.captured && pm.captured.r === m.to.r && pm.captured.c === m.to.c
+                    );
+
+                    if (capturesOurMovedPiece) {
+                        // Immediate counter-kill by player!
+                        score -= piece.isKing ? 75 : 45;
+                    } else {
+                        // Player captures another piece
+                        score -= 25;
+                    }
+
+                    const playerCrownsOnJump = playerJumps.some(pm => pm.to.r === 0);
+                    if (playerCrownsOnJump) score -= 30;
+                } else {
+                    const playerCrownsNext = playerCounterMoves.some(pm => pm.to.r === 0);
+                    if (playerCrownsNext) score -= 15;
+                }
+
+                return score;
+            };
+
+            legalMoves.sort((a, b) => evaluateAiMove(b, board) - evaluateAiMove(a, board));
 
             const chosenMove = legalMoves[0];
             const newBoard: BoardState = board.map(row => [...row]);
@@ -432,24 +518,45 @@ export default function CheckersModal({
                 addLog(`👑 Шашка ${opponent.name} стала ДАМКОЮ!`);
             }
 
-            // Multi-jump for AI
+            // Recursive multi-jump for AI
+            const handleAiChainJumps = (curBoard: BoardState, curPos: Position, curPiece: CheckersPiece) => {
+                const chainJumps = getMovesForPiece(curBoard, curPos).filter(jm => jm.isJump);
+                if (chainJumps.length === 0) {
+                    finishAiTurn(curBoard);
+                    return;
+                }
+
+                setTimeout(() => {
+                    const nextJump = chainJumps[0];
+                    curBoard[nextJump.from.r][nextJump.from.c] = null;
+                    curBoard[nextJump.to.r][nextJump.to.c] = curPiece;
+                    if (nextJump.captured) {
+                        curBoard[nextJump.captured.r][nextJump.captured.c] = null;
+                        setOppCapturedCount(prev => prev + 1);
+                    }
+                    let crownedInChain = false;
+                    if (!curPiece.isKing && nextJump.to.r === 7) {
+                        curPiece.isKing = true;
+                        crownedInChain = true;
+                        playTone('king');
+                        addLog(`👑 Шашка ${opponent.name} стала ДАМКОЮ!`);
+                    }
+                    setBoard([...curBoard]);
+                    playTone('capture');
+
+                    if (!crownedInChain) {
+                        handleAiChainJumps(curBoard, nextJump.to, curPiece);
+                    } else {
+                        finishAiTurn(curBoard);
+                    }
+                }, 500);
+            };
+
             if (wasCapture && !becameKing) {
                 const moreJumps = getMovesForPiece(newBoard, chosenMove.to).filter(m => m.isJump);
                 if (moreJumps.length > 0) {
                     setBoard(newBoard);
-                    // Trigger immediate next jump
-                    setTimeout(() => {
-                        const nextJump = moreJumps[0];
-                        newBoard[nextJump.from.r][nextJump.from.c] = null;
-                        newBoard[nextJump.to.r][nextJump.to.c] = piece;
-                        if (nextJump.captured) {
-                            newBoard[nextJump.captured.r][nextJump.captured.c] = null;
-                            setOppCapturedCount(prev => prev + 1);
-                        }
-                        setBoard([...newBoard]);
-                        playTone('capture');
-                        finishAiTurn(newBoard);
-                    }, 600);
+                    handleAiChainJumps(newBoard, chosenMove.to, piece);
                     return;
                 }
             }

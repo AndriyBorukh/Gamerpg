@@ -64,7 +64,11 @@ export function DecompressionMasterModal({
     if (!isOpen) return null;
 
     const soldiers: ToySoldier[] = progress.toySoldiers || [];
-    const eligibleSoldiers = soldiers.filter(s => (s.level >= 4 || s.experience >= 20) && s.deaths < 3);
+    const eligibleSoldiers = soldiers.filter(s => {
+        const isCheckers = s.isCheckersSquad || s.isMilitarySquad || s.type?.includes('шашк');
+        const minExp = isCheckers ? 160 : 20;
+        return (s.level >= 4 || (s.experience || 0) >= minExp) && s.deaths < 3;
+    });
 
     const squads: ArmySquad[] = progress.armySquads || [];
     const eligibleSquads = squads.filter(s => (s.level >= 4 || s.experience >= 20));

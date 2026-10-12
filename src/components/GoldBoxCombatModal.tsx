@@ -1055,6 +1055,13 @@ export const GoldBoxCombatModal: React.FC<GoldBoxCombatModalProps> = ({
         );
     }, [activeCombatant, combatants]);
 
+    const safeUpdateProgress = useCallback((updated: WorldProgress) => {
+        setTimeout(() => {
+            onUpdateProgress(updated);
+            saveWorldProgress(updated);
+        }, 0);
+    }, [onUpdateProgress]);
+
     // Synchronize all party combatants to worldProgress and save to storage
     const syncAllCombatantsToWorldProgress = (currentList?: Combatant[]) => {
         const sourceList = currentList || combatants;
@@ -1080,8 +1087,7 @@ export const GoldBoxCombatModal: React.FC<GoldBoxCombatModalProps> = ({
             } : progress.playerStats,
             hiredNpcs: updatedHired
         };
-        onUpdateProgress(updatedProgress);
-        saveWorldProgress(updatedProgress);
+        safeUpdateProgress(updatedProgress);
         return updatedProgress;
     };
 
@@ -1225,8 +1231,7 @@ export const GoldBoxCombatModal: React.FC<GoldBoxCombatModalProps> = ({
                     ...progress,
                     hiredNpcs: updatedHired
                 };
-                onUpdateProgress(updatedP);
-                saveWorldProgress(updatedP);
+                safeUpdateProgress(updatedP);
             }
 
             return nextList;
@@ -1265,7 +1270,7 @@ export const GoldBoxCombatModal: React.FC<GoldBoxCombatModalProps> = ({
 
         // Sync to worldProgress
         if (activeCombatant.isPlayer) {
-            onUpdateProgress({
+            safeUpdateProgress({
                 ...progress,
                 playerStats: {
                     ...progress.playerStats,
@@ -1274,7 +1279,7 @@ export const GoldBoxCombatModal: React.FC<GoldBoxCombatModalProps> = ({
             });
         } else if (activeCombatant.side === 'player') {
             if (progress.hiredNpcs) {
-                onUpdateProgress({
+                safeUpdateProgress({
                     ...progress,
                     hiredNpcs: progress.hiredNpcs.map(npc => 
                         npc.id === activeCombatant.id ? { ...npc, currentAbilityCharges: nextPoints } : npc
@@ -1500,7 +1505,7 @@ export const GoldBoxCombatModal: React.FC<GoldBoxCombatModalProps> = ({
 
         // Sync to worldProgress
         if (activeCombatant.isPlayer) {
-            onUpdateProgress({
+            safeUpdateProgress({
                 ...progress,
                 playerStats: {
                     ...progress.playerStats,
@@ -1509,7 +1514,7 @@ export const GoldBoxCombatModal: React.FC<GoldBoxCombatModalProps> = ({
             });
         } else if (activeCombatant.side === 'player') {
             if (progress.hiredNpcs) {
-                onUpdateProgress({
+                safeUpdateProgress({
                     ...progress,
                     hiredNpcs: progress.hiredNpcs.map(npc => 
                         npc.id === activeCombatant.id ? { ...npc, currentAbilityCharges: nextPoints } : npc
@@ -1620,7 +1625,7 @@ export const GoldBoxCombatModal: React.FC<GoldBoxCombatModalProps> = ({
 
         // Sync to worldProgress
         if (activeCombatant.isPlayer) {
-            onUpdateProgress({
+            safeUpdateProgress({
                 ...progress,
                 playerStats: {
                     ...progress.playerStats,
@@ -1629,7 +1634,7 @@ export const GoldBoxCombatModal: React.FC<GoldBoxCombatModalProps> = ({
             });
         } else if (activeCombatant.side === 'player') {
             if (progress.hiredNpcs) {
-                onUpdateProgress({
+                safeUpdateProgress({
                     ...progress,
                     hiredNpcs: progress.hiredNpcs.map(npc => 
                         npc.id === activeCombatant.id ? { ...npc, currentAbilityCharges: nextPoints } : npc
@@ -1689,8 +1694,7 @@ export const GoldBoxCombatModal: React.FC<GoldBoxCombatModalProps> = ({
                             ...progress,
                             hiredNpcs: updatedHired
                         };
-                        onUpdateProgress(updatedP);
-                        saveWorldProgress(updatedP);
+                        safeUpdateProgress(updatedP);
                     }
 
                     return nextList;
@@ -1699,7 +1703,7 @@ export const GoldBoxCombatModal: React.FC<GoldBoxCombatModalProps> = ({
                 // Immediately sync healed HP if target is the player character
                 if (isTargetPlayer) {
                     const finalHp = Math.min(target.maxHp, target.hp + healAmount);
-                    onUpdateProgress({
+                    safeUpdateProgress({
                         ...progress,
                         playerStats: {
                             ...progress.playerStats,

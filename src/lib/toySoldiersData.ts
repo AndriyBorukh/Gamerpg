@@ -208,10 +208,38 @@ export function getRangeAttackModifier(distance: number, rawType?: string): numb
     return getSoldierAttackModifier(rawType, distance);
 }
 
-// Check if soldier reaches new level based on XP (every 10 XP = +1 level, max lvl 4)
+// Level thresholds for checkers / toy soldiers:
+// Рівень 1: 20 XP
+// Рівень 2: 40 XP (поріг множиться на 2)
+// Рівень 3: 80 XP (поріг множиться на 2)
+// Рівень 4: 160 XP (поріг множиться на 2 - готовність до декомпресії)
+export function getExpThresholdForLevel(level: number): number {
+    if (level <= 0) return 0;
+    return 20 * Math.pow(2, level - 1);
+}
+
+export function calculateLevelFromExp(experience: number): number {
+    if (experience < 20) return 0;
+    let lvl = 1;
+    while (experience >= getExpThresholdForLevel(lvl + 1)) {
+        lvl++;
+    }
+    return Math.min(4, lvl);
+}
+
+export function getNextLevelExpThreshold(currentExp: number): { currentLevel: number; nextLevel: number; nextThreshold: number; expRemaining: number } {
+    const currentLevel = calculateLevelFromExp(currentExp);
+    if (currentLevel >= 4) {
+        return { currentLevel, nextLevel: 4, nextThreshold: 160, expRemaining: 0 };
+    }
+    const nextLevel = currentLevel + 1;
+    const nextThreshold = getExpThresholdForLevel(nextLevel);
+    const expRemaining = Math.max(0, nextThreshold - currentExp);
+    return { currentLevel, nextLevel, nextThreshold, expRemaining };
+}
+
 export function calculateSoldierLevel(experience: number): number {
-    const calculated = Math.floor(experience / 10);
-    return Math.min(4, Math.max(0, calculated));
+    return calculateLevelFromExp(experience);
 }
 
 // Starter soldiers
@@ -304,7 +332,7 @@ export const TOY_SHOP_CATALOG: Omit<ToySoldier, 'id' | 'level' | 'experience' | 
         maxHp: 1,
         type: 'шашка',
         cost: 15,
-        description: '1 шт • Для бойових шашок 8х8 (потрібно 12 шт). 20 XP = декомпресія у супутника!'
+        description: '1 шт • Для бойових шашок 8х8 (потрібно 12 шт). 20 XP = 1-й рівень, поріг подвоюється до 4-го рівня (160 XP = декомпресія у супутника)!'
     },
     {
         name: 'Набір бойових шашок (12 шт)',
@@ -486,12 +514,7 @@ export function getCheckersSquadMaxSoldiers(squad: ToySoldier): number {
 export function applySquadExpAndLevelUp(squad: ToySoldier, expGained: number): { updatedSquad: ToySoldier; leveledUp: boolean } {
     const oldLvl = squad.level || 0;
     const newExp = (squad.experience || 0) + expGained;
-    let newLvl = oldLvl;
-
-    // Thresholds for checkers squad levels: 5 XP -> Lvl 1, 10 XP -> Lvl 2, 15 XP -> Lvl 3, 20 XP -> Lvl 4
-    while (newLvl < 4 && newExp >= (newLvl + 1) * 5) {
-        newLvl += 1;
-    }
+    const newLvl = calculateLevelFromExp(newExp);
 
     let soldierHps = squad.soldierHps && squad.soldierHps.length > 0
         ? [...squad.soldierHps]
@@ -932,12 +955,7 @@ export function getMilitarySquadPerkLabel(level: number): string {
 export function applyMilitarySquadExpAndLevelUp(squad: ToySoldier, expGained: number): { updatedSquad: ToySoldier; leveledUp: boolean } {
     const oldLvl = squad.level || 0;
     const newExp = (squad.experience || 0) + expGained;
-    let newLvl = oldLvl;
-
-    // Thresholds: 5 XP per level (5 -> L1, 10 -> L2, 15 -> L3, 20 -> L4)
-    while (newLvl < 4 && newExp >= (newLvl + 1) * 5) {
-        newLvl += 1;
-    }
+    const newLvl = calculateLevelFromExp(newExp);
 
     const leveledUp = newLvl > oldLvl;
     const updatedSquad: ToySoldier = {

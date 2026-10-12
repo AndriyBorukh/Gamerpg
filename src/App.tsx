@@ -67,6 +67,7 @@ import JoustingModal from './components/JoustingModal';
 import ToySoldiersModal from './components/ToySoldiersModal';
 import { ArmyBattleModal } from './components/ArmyBattleModal';
 import { CheckersWarModal } from './components/CheckersWarModal';
+import { RpgArmyCheckersModal } from './components/RpgArmyCheckersModal';
 import { ToyCheckersModal } from './components/ToyCheckersModal';
 import { ToyPawnsModal } from './components/ToyPawnsModal';
 import { WizardBattleModal } from './components/WizardBattleModal';
@@ -463,6 +464,13 @@ export default function App() {
         settlement: SettlementData;
         betAmount?: number;
         variant?: 'checkers_war' | 'aranian_checkers_war' | 'military_checkers' | 'aranian_military_checkers';
+    } | null>(null);
+
+    const [activeRpgArmyCheckers, setActiveRpgArmyCheckers] = useState<{
+        opponent: OpponentData;
+        tavern: TavernData;
+        settlement: SettlementData;
+        betAmount?: number;
     } | null>(null);
 
     const [activeToyCheckers, setActiveToyCheckers] = useState<{
@@ -3236,6 +3244,16 @@ export default function App() {
                             });
                         });
                     }}
+                    onChallengeRpgArmyCheckers={(opp) => {
+                        tryStartGame(() => {
+                            setActiveRpgArmyCheckers({
+                                opponent: opp,
+                                tavern: activeTavern,
+                                settlement: activeSettlement,
+                                betAmount: 25
+                            });
+                        });
+                    }}
                     onChallengeToyCheckers={(opp, boardSize = 8, movementMode = 'combat') => {
                         const gameType = movementMode === 'checkers_classic' ? 'toy_checkers_classic' : boardSize === 10 ? 'toy_checkers_10x10' : boardSize === 12 ? 'toy_checkers_12x12' : 'toy_checkers';
                         tryStartGame(() => {
@@ -3990,6 +4008,44 @@ export default function App() {
                         setActiveCheckersWar(null);
                     }}
                     onClose={() => setActiveCheckersWar(null)}
+                    onOpenToyShop={() => setIsToyShopOpen(true)}
+                />
+            )}
+
+            {/* ⚔️👑 Рольові армійські шашки (8х8 Checkers with G29 Tactical Squad Battles) */}
+            {activeRpgArmyCheckers && activeRpgArmyCheckers.opponent && (
+                <RpgArmyCheckersModal
+                    isOpen={true}
+                    opponent={activeRpgArmyCheckers.opponent}
+                    tavernName={activeRpgArmyCheckers.tavern?.name || 'Таверна'}
+                    progress={worldProgress}
+                    onUpdateProgress={(updated) => {
+                        setWorldProgress(updated);
+                        saveWorldProgress(updated);
+                    }}
+                    onVictory={(finalProgress) => {
+                        handleGenericGameVictory(
+                            activeRpgArmyCheckers.opponent,
+                            activeRpgArmyCheckers.tavern,
+                            activeRpgArmyCheckers.settlement,
+                            'rpg_army_checkers',
+                            activeRpgArmyCheckers.betAmount,
+                            finalProgress
+                        );
+                        setActiveRpgArmyCheckers(null);
+                    }}
+                    onDefeat={(finalProgress) => {
+                        handleGenericGameDefeat(
+                            activeRpgArmyCheckers.opponent,
+                            activeRpgArmyCheckers.tavern,
+                            activeRpgArmyCheckers.settlement,
+                            'rpg_army_checkers',
+                            activeRpgArmyCheckers.betAmount,
+                            finalProgress
+                        );
+                        setActiveRpgArmyCheckers(null);
+                    }}
+                    onClose={() => setActiveRpgArmyCheckers(null)}
                     onOpenToyShop={() => setIsToyShopOpen(true)}
                 />
             )}

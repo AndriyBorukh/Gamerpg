@@ -971,7 +971,8 @@ export function getRetiredNpcDialogue(
         aranian_military_checkers: 'аранійські військові шашки (8x8 • 120 бійців)',
         tavern_labyrinth: 'підземний лабіринт на час',
         tavern_treasure_hunter: 'шукач скарбів (платформер)',
-        fantasy_adventure: 'фантастичні пригоди (JRPG бій)'
+        fantasy_adventure: 'фантастичні пригоди (JRPG бій)',
+        rpg_army_checkers: 'рольові армійські шашки (G29)'
     };
 
     const gameLabel = activityNames[activityType] || 'гру';
