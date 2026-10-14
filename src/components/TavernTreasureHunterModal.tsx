@@ -9,6 +9,7 @@ import {
     VolumeX
 } from 'lucide-react';
 import { OpponentData } from '../types';
+import '../assets/goblin_animations.css';
 
 interface TavernTreasureHunterModalProps {
     isOpen: boolean;
@@ -41,10 +42,12 @@ interface Projectile {
     vx: number;
     width: number;
     height: number;
+    isEnemy?: boolean;
 }
 
 interface Enemy {
     id: string;
+    type: 'goblin' | 'archer';
     x: number;
     y: number;
     vx: number;
@@ -52,6 +55,10 @@ interface Enemy {
     height: number;
     startX: number;
     range: number;
+    facing: 'left' | 'right';
+    isAiming?: boolean;
+    shootTimer?: number;
+    shootCooldown?: number;
 }
 
 const CANVAS_WIDTH = 800;
@@ -98,6 +105,10 @@ export default function TavernTreasureHunterModal({
 
     // Audio context cache for zero-lag sound effects
     const audioCtxRef = useRef<AudioContext | null>(null);
+    const goblinSpriteSheetRef = useRef<HTMLImageElement | null>(null);
+    const archerMoveImagesRef = useRef<HTMLImageElement[]>([]);
+    const archerShootImagesRef = useRef<HTMLImageElement[]>([]);
+    const [assetsLoaded, setAssetsLoaded] = useState(false);
 
     const playerRef = useRef({
         x: 60,
@@ -119,7 +130,7 @@ export default function TavernTreasureHunterModal({
     const collectiblesRef = useRef<Collectible[]>([]);
     const enemiesRef = useRef<Enemy[]>([]);
 
-    const playSound = useCallback((type: 'jump' | 'coin' | 'key' | 'door' | 'hit' | 'win') => {
+    const playSound = useCallback((type: 'jump' | 'coin' | 'key' | 'door' | 'hit' | 'win' | 'shoot') => {
         if (!soundEnabled) return;
         try {
             if (!audioCtxRef.current) {
@@ -178,6 +189,14 @@ export default function TavernTreasureHunterModal({
                 gain.gain.linearRampToValueAtTime(0, now + 0.2);
                 osc.start(now);
                 osc.stop(now + 0.2);
+            } else if (type === 'shoot') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(420, now);
+                osc.frequency.exponentialRampToValueAtTime(160, now + 0.12);
+                gain.gain.setValueAtTime(0.16, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.12);
+                osc.start(now);
+                osc.stop(now + 0.12);
             }
         } catch {
             // Audio error ignored
@@ -200,6 +219,56 @@ export default function TavernTreasureHunterModal({
         }
         if (levelTextRef.current) levelTextRef.current.textContent = `${levelValRef.current} / 3`;
     };
+
+    useEffect(() => {
+        if (isOpen && !assetsLoaded) {
+            import('../lib/spriteUtils').then(async (utils) => {
+                const spriteImages = [
+                    '/assets/goblin_animation/frame_001.png',
+                    '/assets/goblin_animation/frame_002.png',
+                    '/assets/goblin_animation/frame_003.png',
+                    '/assets/goblin_animation/frame_004.png',
+                    '/assets/goblin_animation/frame_005.png',
+                    '/assets/goblin_animation/frame_006.png',
+                    '/assets/goblin_animation/frame_007.png',
+                    '/assets/goblin_animation/frame_008.png'
+                ];
+
+                const archerMovePaths = [
+                    '/assets/goblin_archer_move/frame_001.png',
+                    '/assets/goblin_archer_move/frame_002.png',
+                    '/assets/goblin_archer_move/frame_003.png',
+                    '/assets/goblin_archer_move/frame_004.png',
+                    '/assets/goblin_archer_move/frame_005.png',
+                    '/assets/goblin_archer_move/frame_006.png',
+                    '/assets/goblin_archer_move/frame_007.png',
+                    '/assets/goblin_archer_move/frame_008.png',
+                    '/assets/goblin_archer_move/frame_009.png',
+                    '/assets/goblin_archer_move/frame_010.png'
+                ];
+
+                const archerShootPaths = [
+                    '/assets/goblin_archer_shoot/frame_010.png',
+                    '/assets/goblin_archer_shoot/frame_011.png',
+                    '/assets/goblin_archer_shoot/frame_012.png'
+                ];
+                
+                try {
+                    const [spriteSheet, archerMoveImgs, archerShootImgs] = await Promise.all([
+                        utils.createGoblinSpriteSheet(spriteImages),
+                        utils.loadFrameImages(archerMovePaths),
+                        utils.loadFrameImages(archerShootPaths)
+                    ]);
+                    goblinSpriteSheetRef.current = spriteSheet;
+                    archerMoveImagesRef.current = archerMoveImgs;
+                    archerShootImagesRef.current = archerShootImgs;
+                    setAssetsLoaded(true);
+                } catch (e) {
+                    console.error('Failed to load sprites:', e);
+                }
+            });
+        }
+    }, [isOpen, assetsLoaded]);
 
     const generateLevel = (lvl: number) => {
         const plats: Platform[] = [
@@ -283,19 +352,49 @@ export default function TavernTreasureHunterModal({
                     collected: false 
                 });
             }
-            if (Math.random() > 0.7) {
+            if (Math.random() > 0.55 && plat.width >= 70) {
+                const isArcher = Math.random() > 0.45;
                 enemies.push({ 
-                    id: `g${index}`, 
+                    id: isArcher ? `ga${index}` : `g${index}`, 
+                    type: isArcher ? 'archer' : 'goblin',
                     x: plat.x + 10, 
-                    y: plat.y - 28, 
-                    vx: 1 + Math.random(), 
-                    width: 28, 
-                    height: 28, 
+                    y: plat.y - 64, 
+                    vx: isArcher ? (Math.random() > 0.5 ? 0.9 : -0.9) : (1 + Math.random() * 0.8), 
+                    width: 64, 
+                    height: 64, 
                     startX: plat.x, 
-                    range: plat.width - 28 
+                    range: Math.max(10, plat.width - 64),
+                    facing: 'right',
+                    isAiming: false,
+                    shootTimer: 0,
+                    shootCooldown: Math.floor(Math.random() * 50)
                 });
             }
         });
+
+        // Ensure at least 2 archers spawn on each level
+        const archersInLevel = enemies.filter(e => e.type === 'archer').length;
+        if (archersInLevel < 2) {
+            const availablePlats = platformsRef.current.filter((p, i) => i >= 3 && p.width >= 80 && !enemies.some(e => Math.abs(e.startX - p.x) < 5));
+            for (let i = 0; i < Math.min(2 - archersInLevel, availablePlats.length); i++) {
+                const plat = availablePlats[i];
+                enemies.push({
+                    id: `ga_fixed_${i}`,
+                    type: 'archer',
+                    x: plat.x + 12,
+                    y: plat.y - 64,
+                    vx: 0.9,
+                    width: 64,
+                    height: 64,
+                    startX: plat.x,
+                    range: Math.max(10, plat.width - 64),
+                    facing: 'right',
+                    isAiming: false,
+                    shootTimer: 0,
+                    shootCooldown: 25 + i * 30
+                });
+            }
+        }
 
         // Add key, crossbow and door
         const validPlats = platformsRef.current.filter((_, index) => index >= 3);
@@ -560,54 +659,201 @@ export default function TavernTreasureHunterModal({
                 }
             });
 
-            // 12b. Projectile logic
-            if (hasCrossbowRef.current && keys['Control']) {
-                if (projectilesRef.current.length < 3) {
+            // 12b. Projectile logic (Player crossbow)
+            const shootRequested = keys['Control'] || keys['f'] || keys['F'] || keys['x'] || keys['X'] || keys['btn_shoot'];
+            if (hasCrossbowRef.current && shootRequested) {
+                const playerArrows = projectilesRef.current.filter(p => !p.isEnemy);
+                if (playerArrows.length < 3) {
                     projectilesRef.current.push({
-                        x: p.x + (p.facing === 'right' ? p.width : -10),
-                        y: p.y + p.height / 2,
+                        x: p.facing === 'right' ? p.x + p.width : p.x - 12,
+                        y: p.y + p.height / 2 - 2,
                         vx: p.facing === 'right' ? 10 : -10,
-                        width: 10,
-                        height: 4
+                        width: 14,
+                        height: 4,
+                        isEnemy: false
                     });
-                    // Simple cooldown could be added here
-                    keys['Control'] = false; // crude cooldown
+                    playSound('shoot');
+                    keys['Control'] = false;
+                    keys['f'] = false;
+                    keys['F'] = false;
+                    keys['x'] = false;
+                    keys['X'] = false;
+                    keys['btn_shoot'] = false;
                 }
             }
 
-            projectilesRef.current.forEach((proj, index) => {
+            // Projectile movement and collisions
+            for (let i = projectilesRef.current.length - 1; i >= 0; i--) {
+                const proj = projectilesRef.current[i];
+                if (!proj) continue;
                 proj.x += proj.vx;
+
+                // Out of world bounds
                 if (proj.x < 0 || proj.x > WORLD_WIDTH) {
-                    projectilesRef.current.splice(index, 1);
-                    return;
+                    projectilesRef.current.splice(i, 1);
+                    continue;
                 }
-                
-                // Collision with enemies
-                enemiesRef.current.forEach((enemy, eIndex) => {
+
+                // Check collision with platform walls
+                let hitPlatform = false;
+                for (const plat of platformsRef.current) {
                     if (
-                        proj.x < enemy.x + enemy.width &&
-                        proj.x + proj.width > enemy.x &&
-                        proj.y < enemy.y + enemy.height &&
-                        proj.y + proj.height > enemy.y
+                        proj.x < plat.x + plat.width &&
+                        proj.x + proj.width > plat.x &&
+                        proj.y < plat.y + plat.height &&
+                        proj.y + proj.height > plat.y
                     ) {
-                        enemiesRef.current.splice(eIndex, 1);
-                        projectilesRef.current.splice(index, 1);
-                        playSound('hit');
+                        hitPlatform = true;
+                        break;
                     }
-                });
-            });
+                }
+                if (hitPlatform) {
+                    projectilesRef.current.splice(i, 1);
+                    continue;
+                }
+
+                if (proj.isEnemy) {
+                    // Enemy arrow hits player
+                    const playerBox = { x: p.x + 3, y: p.y + 2, width: p.width - 6, height: p.height - 4 };
+                    if (
+                        proj.x < playerBox.x + playerBox.width &&
+                        proj.x + proj.width > playerBox.x &&
+                        proj.y < playerBox.y + playerBox.height &&
+                        proj.y + proj.height > playerBox.y
+                    ) {
+                        projectilesRef.current.splice(i, 1);
+                        livesValRef.current -= 1;
+                        updateHUD();
+                        playSound('hit');
+                        if (livesValRef.current <= 0) {
+                            setGameState('defeat');
+                            onDefeat(Math.floor(expectedXpReward * 0.3));
+                            return;
+                        } else {
+                            p.x = 60;
+                            p.y = 350;
+                            p.vx = 0;
+                            p.vy = 0;
+                        }
+                        continue;
+                    }
+
+                    // Intercept with player arrow
+                    let intercepted = false;
+                    for (let j = projectilesRef.current.length - 1; j >= 0; j--) {
+                        const other = projectilesRef.current[j];
+                        if (other && !other.isEnemy && j !== i) {
+                            if (
+                                Math.abs(proj.x - other.x) < 16 &&
+                                Math.abs(proj.y - other.y) < 12
+                            ) {
+                                projectilesRef.current.splice(Math.max(i, j), 1);
+                                projectilesRef.current.splice(Math.min(i, j), 1);
+                                playSound('hit');
+                                intercepted = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (intercepted) continue;
+                } else {
+                    // Player arrow hits enemies
+                    let hitEnemy = false;
+                    for (let eIndex = enemiesRef.current.length - 1; eIndex >= 0; eIndex--) {
+                        const enemy = enemiesRef.current[eIndex];
+                        if (
+                            proj.x < enemy.x + enemy.width &&
+                            proj.x + proj.width > enemy.x &&
+                            proj.y < enemy.y + enemy.height &&
+                            proj.y + proj.height > enemy.y
+                        ) {
+                            const isArcher = enemy.type === 'archer';
+                            enemiesRef.current.splice(eIndex, 1);
+                            projectilesRef.current.splice(i, 1);
+                            scoreValRef.current += (isArcher ? 150 : 100);
+                            updateHUD();
+                            playSound('hit');
+                            hitEnemy = true;
+                            break;
+                        }
+                    }
+                    if (hitEnemy) continue;
+                }
+            }
 
             // 13. Enemy collision and update
             enemiesRef.current.forEach(enemy => {
-                // Move enemy
-                enemy.x += enemy.vx;
-                if (enemy.x < enemy.startX || enemy.x > enemy.startX + enemy.range) {
-                    enemy.vx *= -1;
+                if (enemy.type === 'archer') {
+                    // Archer AI
+                    const dx = p.x - enemy.x;
+                    const dy = p.y - enemy.y;
+                    const inVerticalSight = Math.abs(dy) <= 75; // roughly same platform level (+/- 75px)
+                    const inHorizontalRange = Math.abs(dx) <= 450;
+                    const facingPlayer = (dx > 0 && enemy.facing === 'right') || (dx < 0 && enemy.facing === 'left');
+                    const closeToPlayer = Math.abs(dx) < 130;
+
+                    const canSeePlayer = inVerticalSight && inHorizontalRange && (facingPlayer || closeToPlayer);
+
+                    if (enemy.shootCooldown && enemy.shootCooldown > 0) {
+                        enemy.shootCooldown -= 1;
+                    }
+
+                    if (canSeePlayer) {
+                        // Face towards player
+                        enemy.facing = dx >= 0 ? 'right' : 'left';
+                        enemy.isAiming = true;
+                        enemy.shootTimer = (enemy.shootTimer || 0) + 1;
+
+                        // Shoot when draw animation reaches 32 ticks (~0.5s of drawing bow)
+                        if (enemy.shootTimer >= 32 && (!enemy.shootCooldown || enemy.shootCooldown <= 0)) {
+                            projectilesRef.current.push({
+                                x: enemy.facing === 'right' ? enemy.x + enemy.width - 8 : enemy.x + 8,
+                                y: enemy.y + 28,
+                                vx: enemy.facing === 'right' ? 6.2 : -6.2,
+                                width: 14,
+                                height: 4,
+                                isEnemy: true
+                            });
+                            playSound('shoot');
+                            enemy.shootTimer = 0;
+                            enemy.shootCooldown = 85; // ~1.4s cooldown
+                        }
+                    } else {
+                        // Patrol on platform
+                        enemy.isAiming = false;
+                        enemy.shootTimer = 0;
+                        enemy.x += enemy.vx;
+                        if (enemy.x < enemy.startX) {
+                            enemy.x = enemy.startX;
+                            enemy.vx = Math.abs(enemy.vx);
+                            enemy.facing = 'right';
+                        } else if (enemy.x > enemy.startX + enemy.range) {
+                            enemy.x = enemy.startX + enemy.range;
+                            enemy.vx = -Math.abs(enemy.vx);
+                            enemy.facing = 'left';
+                        } else {
+                            enemy.facing = enemy.vx >= 0 ? 'right' : 'left';
+                        }
+                    }
+                } else {
+                    // Regular Melee Goblin patrol
+                    enemy.x += enemy.vx;
+                    if (enemy.x < enemy.startX) {
+                        enemy.x = enemy.startX;
+                        enemy.vx = Math.abs(enemy.vx);
+                        enemy.facing = 'right';
+                    } else if (enemy.x > enemy.startX + enemy.range) {
+                        enemy.x = enemy.startX + enemy.range;
+                        enemy.vx = -Math.abs(enemy.vx);
+                        enemy.facing = 'left';
+                    } else {
+                        enemy.facing = enemy.vx >= 0 ? 'right' : 'left';
+                    }
                 }
 
                 // Check collision with player
-                const playerBox = { x: p.x, y: p.y, width: p.width, height: p.height };
-                const enemyBox = { x: enemy.x, y: enemy.y, width: enemy.width, height: enemy.height };
+                const playerBox = { x: p.x + 3, y: p.y + 2, width: p.width - 6, height: p.height - 4 };
+                const enemyBox = { x: enemy.x + 8, y: enemy.y + 8, width: enemy.width - 16, height: enemy.height - 8 };
 
                 if (
                     playerBox.x < enemyBox.x + enemyBox.width &&
@@ -615,7 +861,6 @@ export default function TavernTreasureHunterModal({
                     playerBox.y < enemyBox.y + enemyBox.height &&
                     playerBox.y + playerBox.height > enemyBox.y
                 ) {
-                    // Player hit
                     livesValRef.current -= 1;
                     updateHUD();
                     playSound('hit');
@@ -623,7 +868,6 @@ export default function TavernTreasureHunterModal({
                         setGameState('defeat');
                         onDefeat(Math.floor(expectedXpReward * 0.3));
                     } else {
-                        // Reset player position on hit
                         p.x = 60;
                         p.y = 350;
                         p.vx = 0;
@@ -734,6 +978,49 @@ export default function TavernTreasureHunterModal({
                 ctx.restore();
             });
 
+            // Draw projectiles
+            projectilesRef.current.forEach(proj => {
+                ctx.save();
+                if (proj.isEnemy) {
+                    // Goblin Archer Arrow
+                    ctx.fillStyle = '#78350f'; // Wood shaft
+                    ctx.fillRect(proj.x, proj.y + 1, proj.width - 4, 2);
+
+                    // Arrowhead
+                    ctx.fillStyle = '#e2e8f0';
+                    if (proj.vx > 0) {
+                        ctx.beginPath();
+                        ctx.moveTo(proj.x + proj.width, proj.y + 2);
+                        ctx.lineTo(proj.x + proj.width - 5, proj.y - 1);
+                        ctx.lineTo(proj.x + proj.width - 5, proj.y + 5);
+                        ctx.closePath();
+                        ctx.fill();
+
+                        // Red feather fletching
+                        ctx.fillStyle = '#dc2626';
+                        ctx.fillRect(proj.x, proj.y, 3, 4);
+                    } else {
+                        ctx.beginPath();
+                        ctx.moveTo(proj.x, proj.y + 2);
+                        ctx.lineTo(proj.x + 5, proj.y - 1);
+                        ctx.lineTo(proj.x + 5, proj.y + 5);
+                        ctx.closePath();
+                        ctx.fill();
+
+                        // Red feather fletching
+                        ctx.fillStyle = '#dc2626';
+                        ctx.fillRect(proj.x + proj.width - 3, proj.y, 3, 4);
+                    }
+                } else {
+                    // Player golden crossbow bolt
+                    ctx.fillStyle = '#facc15';
+                    ctx.fillRect(proj.x, proj.y, proj.width, proj.height);
+                    ctx.fillStyle = '#fef08a';
+                    ctx.fillRect(proj.x + (proj.vx > 0 ? proj.width - 3 : 0), proj.y - 1, 3, proj.height + 2);
+                }
+                ctx.restore();
+            });
+
             // Draw Player (Dave / Hunter) with clean sub-pixel rounding
             const px = Math.round(p.x);
             const py = Math.round(p.y);
@@ -771,70 +1058,78 @@ export default function TavernTreasureHunterModal({
             }
             ctx.restore();
 
-            // Draw projectiles
-            ctx.fillStyle = '#fde047';
-            projectilesRef.current.forEach(proj => {
-                ctx.fillRect(proj.x, proj.y, proj.width, proj.height);
-            });
-
-            // Draw Goblin Enemies
+            // Draw Enemies (Melee Goblins and Goblin Archers)
             enemiesRef.current.forEach(enemy => {
                 ctx.save();
                 ctx.translate(enemy.x, enemy.y);
                 
-                // Body
-                ctx.fillStyle = '#16a34a'; // Green skin/body
-                ctx.fillRect(4, 8, 16, 16);
+                if (enemy.type === 'archer') {
+                    const moveImgs = archerMoveImagesRef.current;
+                    const shootImgs = archerShootImagesRef.current;
 
-                // Head
-                ctx.fillStyle = '#22c55e'; // Lighter green
-                ctx.fillRect(6, 0, 12, 12);
-
-                // Cap
-                ctx.fillStyle = '#c2410c'; // Brownish/Orange cap
-                ctx.fillRect(8, -4, 10, 6);
-                ctx.fillStyle = '#9a3412'; // Cap shadow/band
-                ctx.fillRect(8, 0, 10, 2); 
-
-                // Ears
-                ctx.fillStyle = '#16a34a';
-                ctx.fillRect(2, 4, 4, 4); // Left ear
-                ctx.fillRect(18, 4, 4, 4); // Right ear
-
-                // Eyes
-                ctx.fillStyle = 'white';
-                ctx.fillRect(8, 2, 2, 2); // Left eye
-                ctx.fillRect(14, 2, 2, 2); // Right eye
-                ctx.fillStyle = 'black'; // Pupils
-                ctx.fillRect(9, 3, 1, 1);
-                ctx.fillRect(15, 3, 1, 1);
-                
-                // Eyebrows
-                ctx.fillStyle = '#14532d';
-                ctx.fillRect(8, 1, 3, 1);
-                ctx.fillRect(13, 1, 3, 1);
-
-                // Nose
-                ctx.fillStyle = '#15803d';
-                ctx.fillRect(10, 5, 2, 2);
-
-                // Mouth/Smirk
-                ctx.fillStyle = '#064e3b';
-                ctx.fillRect(8, 9, 8, 2);
-                // Teeth
-                ctx.fillStyle = '#fef3c7';
-                ctx.fillRect(9, 10, 1, 1);
-                ctx.fillRect(13, 10, 1, 1);
-
-                // Axe
-                ctx.fillStyle = '#a1a1aa'; // Grey axe blade
-                ctx.fillRect(0, 8, 6, 8);
-                ctx.fillStyle = '#e4e4e7'; // Blade edge
-                ctx.fillRect(0, 8, 2, 8);
-                ctx.fillStyle = '#57534e'; // Handle grip
-                ctx.fillRect(2, 8, 2, 16);
-                ctx.fillStyle = '#78350f'; // Handle end
-                ctx.fillRect(2, 22, 2, 2);
+                    if (enemy.isAiming && shootImgs && shootImgs.length > 0) {
+                        // Shoot animation (3 frames: 10, 11, 12)
+                        const shootIdx = Math.min(
+                            shootImgs.length - 1,
+                            Math.floor(((enemy.shootTimer || 0) / 32) * shootImgs.length)
+                        );
+                        const img = shootImgs[shootIdx];
+                        if (img && img.complete) {
+                            if (enemy.facing === 'left') {
+                                ctx.scale(-1, 1);
+                                ctx.drawImage(img, -64, 0, 64, 64);
+                            } else {
+                                ctx.drawImage(img, 0, 0, 64, 64);
+                            }
+                        } else {
+                            ctx.fillStyle = '#b45309';
+                            ctx.fillRect(enemy.facing === 'left' ? -64 : 0, 0, 64, 64);
+                        }
+                    } else if (moveImgs && moveImgs.length > 0) {
+                        // Walking animation (10 frames)
+                        const moveIdx = Math.floor((performance.now() / 130) % moveImgs.length);
+                        const img = moveImgs[moveIdx];
+                        if (img && img.complete) {
+                            if (enemy.facing === 'left') {
+                                ctx.scale(-1, 1);
+                                ctx.drawImage(img, -64, 0, 64, 64);
+                            } else {
+                                ctx.drawImage(img, 0, 0, 64, 64);
+                            }
+                        } else {
+                            ctx.fillStyle = '#d97706';
+                            ctx.fillRect(enemy.facing === 'left' ? -64 : 0, 0, 64, 64);
+                        }
+                    } else {
+                        // Fallback archer
+                        ctx.fillStyle = '#b45309';
+                        ctx.fillRect(0, 0, 64, 64);
+                    }
+                } else {
+                    // Regular Melee Goblin
+                    if (goblinSpriteSheetRef.current && assetsLoaded) {
+                        const frame = Math.floor((performance.now() / 200) % 8);
+                        
+                        if (enemy.facing === 'left' || enemy.vx < 0) {
+                            ctx.scale(-1, 1);
+                            ctx.drawImage(
+                                goblinSpriteSheetRef.current,
+                                frame * 32, 0, 32, 32,
+                                -64, 0, 64, 64
+                            );
+                        } else {
+                            ctx.drawImage(
+                                goblinSpriteSheetRef.current,
+                                frame * 32, 0, 32, 32,
+                                0, 0, 64, 64
+                            );
+                        }
+                    } else {
+                        // Fallback
+                        ctx.fillStyle = '#16a34a';
+                        ctx.fillRect(0, 0, 64, 64);
+                    }
+                }
                 
                 ctx.restore();
             });
@@ -915,10 +1210,11 @@ export default function TavernTreasureHunterModal({
                                     Збирайте діаманти, рубіни, золото та знайдіть ключ, щоб відчинити двері виходу. Остерігайтеся прірв та встигніть за 2 хвилини!
                                 </p>
                                 <div className="bg-stone-900/90 border border-yellow-600/40 p-4 rounded-xl w-full text-left space-y-2 text-xs text-stone-300">
-                                    <div className="font-bold text-yellow-400 mb-1">🎮 Керування:</div>
+                                    <div className="font-bold text-yellow-400 mb-1">🎮 Керування та правила:</div>
                                     <div>• Рух: клавіші <span className="text-yellow-300 font-bold">A / D</span> або <span className="text-yellow-300 font-bold">← / →</span></div>
                                     <div>• Стрибок: клавіша <span className="text-yellow-300 font-bold">Space</span> або <span className="text-yellow-300 font-bold">W / ↑</span></div>
-                                    <div>• Також доступні сенсорні кнопки на екрані без жодної затримки!</div>
+                                    <div>• Стрільба (після взяття арбалета): клавіша <span className="text-yellow-300 font-bold">F / Ctrl</span> або кнопка на екрані</div>
+                                    <div>• Остерігайтеся <span className="text-amber-400 font-bold">гоблінів-лучників</span>: вони патрулюють платформи і стріляють стрілами, коли бачать вас!</div>
                                 </div>
                                 <button
                                     onClick={startNewGame}
@@ -997,13 +1293,25 @@ export default function TavernTreasureHunterModal({
                                             ПРАВОРУЧ ▶
                                         </button>
                                     </div>
-                                    <button 
-                                        onMouseDown={(e) => { e.preventDefault(); triggerJump(); }}
-                                        onTouchStart={(e) => { e.preventDefault(); triggerJump(); }}
-                                        className="px-9 py-3.5 bg-gradient-to-r from-yellow-600 to-amber-600 hover:from-yellow-500 active:scale-95 text-stone-950 font-black rounded-xl shadow-lg border border-yellow-400 transition touch-none"
-                                    >
-                                        ▲ СТРИБОК (SPACE)
-                                    </button>
+                                    <div className="flex gap-2.5">
+                                        <button 
+                                            onMouseDown={(e) => { e.preventDefault(); setKey('btn_shoot', true); }}
+                                            onMouseUp={(e) => { e.preventDefault(); setKey('btn_shoot', false); }}
+                                            onTouchStart={(e) => { e.preventDefault(); setKey('btn_shoot', true); }}
+                                            onTouchEnd={(e) => { e.preventDefault(); setKey('btn_shoot', false); }}
+                                            className="px-6 py-3.5 bg-gradient-to-r from-red-800 to-amber-700 hover:from-red-700 active:scale-95 text-amber-200 font-black rounded-xl shadow-lg border border-red-500/60 transition touch-none"
+                                            title="Стріляти (F)"
+                                        >
+                                            🏹 ПОСТРІЛ (F)
+                                        </button>
+                                        <button 
+                                            onMouseDown={(e) => { e.preventDefault(); triggerJump(); }}
+                                            onTouchStart={(e) => { e.preventDefault(); triggerJump(); }}
+                                            className="px-8 py-3.5 bg-gradient-to-r from-yellow-600 to-amber-600 hover:from-yellow-500 active:scale-95 text-stone-950 font-black rounded-xl shadow-lg border border-yellow-400 transition touch-none"
+                                        >
+                                            ▲ СТРИБОК
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -1018,7 +1326,7 @@ export default function TavernTreasureHunterModal({
                                 <div className="bg-stone-900 px-6 py-4 rounded-xl border border-yellow-600/40 w-full space-y-2">
                                     <div className="flex justify-between text-stone-300">
                                         <span>Набрано балів:</span>
-                                        <span className="text-yellow-300 font-bold">{finalScore}</span>
+                                        <span className="text-yellow-300 font-bold">{typeof finalScore === 'number' && !isNaN(finalScore) ? finalScore : 0}</span>
                                     </div>
                                     <div className="flex justify-between text-stone-300">
                                         <span>Отримано досвіду:</span>

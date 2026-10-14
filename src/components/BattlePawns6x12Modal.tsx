@@ -1241,7 +1241,7 @@ export function BattlePawns6x12Modal({
                                                                 <span className={`px-1 rounded text-[6px] sm:text-[7px] font-black leading-none ${
                                                                     cell.hp > 10 ? 'bg-black/90 text-emerald-300' : 'bg-red-950 text-red-300 border border-red-500/50'
                                                                 }`}>
-                                                                    {cell.hp}
+                                                                    {typeof cell.hp === 'number' && !isNaN(cell.hp) ? cell.hp : 0}
                                                                 </span>
                                                             </div>
                                                         </motion.div>

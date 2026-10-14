@@ -59,13 +59,13 @@ export function getBaseFighterStats(role: RpgFighterRole): {
             };
         case 'warrior_2':
             return {
-                name: 'Воїн II (Щитоносець)',
+                name: 'Гвардієць (Щитоносець)',
                 avatar: '🛡️',
                 maxHp: 36,
                 maxMp: 0,
                 damage: 7,
                 defense: 4,
-                description: 'Броньований захисник з важким щитом, тримає стрій.'
+                description: 'Броньований гвардієць з важким щитом, тримає стрій.'
             };
         case 'mage':
             return {
@@ -180,7 +180,7 @@ export function createStarterRpgSquads(): RpgArmyCheckersSquad[] {
     return squads;
 }
 
-export function createEnemyRpgSquads(opponentName: string, difficulty: number = 1): RpgArmyCheckersSquad[] {
+export function createEnemyRpgSquads(opponentName: string, difficulty: number | string = 1): RpgArmyCheckersSquad[] {
     const squads: RpgArmyCheckersSquad[] = [];
     const enemySquadNames = [
         '«Чорні Вовки»',
@@ -197,33 +197,46 @@ export function createEnemyRpgSquads(opponentName: string, difficulty: number = 
         '«Особиста Варта Чемпіона»'
     ];
 
-    const bonusHp = Math.min(12, difficulty * 2);
-    const bonusDmg = Math.min(4, Math.floor(difficulty / 2));
+    let numericDiff = 1;
+    if (typeof difficulty === 'number' && !isNaN(difficulty)) {
+        numericDiff = difficulty;
+    } else if (typeof difficulty === 'string') {
+        const lower = difficulty.toLowerCase();
+        if (lower === 'hard' || lower === 'champion' || lower === 'legendary') numericDiff = 3;
+        else if (lower === 'medium' || lower === 'normal') numericDiff = 2;
+        else {
+            const parsed = parseFloat(difficulty);
+            numericDiff = isNaN(parsed) ? 1 : parsed;
+        }
+    }
+
+    const bonusHp = Math.max(0, Math.min(12, Math.floor(numericDiff * 2)));
+    const bonusDmg = Math.max(0, Math.min(4, Math.floor(numericDiff / 2)));
 
     for (let i = 0; i < 12; i++) {
         const f1 = createRpgFighter('warrior_1', i + 100);
         f1.name = `Воїн Найманець I`;
-        f1.maxHp += bonusHp;
+        f1.maxHp = (f1.maxHp || 32) + bonusHp;
         f1.currentHp = f1.maxHp;
-        f1.damage += bonusDmg;
+        f1.damage = (f1.damage || 8) + bonusDmg;
 
         const f2 = createRpgFighter('warrior_2', i + 100);
-        f2.name = `Воїн Страж II`;
-        f2.maxHp += bonusHp + 2;
+        f2.name = `Темний Гвардієць`;
+        f2.maxHp = (f2.maxHp || 36) + bonusHp + 2;
         f2.currentHp = f2.maxHp;
-        f2.damage += bonusDmg;
+        f2.damage = (f2.damage || 7) + bonusDmg;
 
         const f3 = createRpgFighter('mage', i + 100);
-        f3.name = `Темний Заклинатель`;
-        f3.maxHp += bonusHp;
+        f3.name = `Темний Маг`;
+        f3.maxHp = (f3.maxHp || 22) + Math.floor(bonusHp * 0.7);
         f3.currentHp = f3.maxHp;
-        f3.damage += bonusDmg;
+        f3.damage = (f3.damage || 10) + bonusDmg;
 
         const f4 = createRpgFighter('cleric', i + 100);
-        f4.name = `Культист-Цілитель`;
-        f4.maxHp += bonusHp;
+        f4.name = `Темний Клірик`;
+        f4.maxHp = (f4.maxHp || 26) + Math.floor(bonusHp * 0.8);
         f4.currentHp = f4.maxHp;
-        f4.damage += bonusDmg;
+        f4.damage = (f4.damage || 6) + Math.max(0, bonusDmg - 1);
 
         squads.push({
             id: `enemy_rpg_squad_${i + 1}`,

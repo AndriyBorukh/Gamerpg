@@ -1215,7 +1215,7 @@ export const FantasyAdventureModal = ({ opponent, onClose, onComplete }: Fantasy
                                     <div className="flex justify-between items-center text-xs sm:text-sm font-black leading-tight">
                                         <span className="text-neutral-400 font-bold">HP</span>
                                         <span className={isLowHp ? 'text-rose-400 animate-pulse' : 'text-white'}>
-                                            {hero.stats.hp}
+                                            {typeof hero.stats.hp === 'number' && !isNaN(hero.stats.hp) ? hero.stats.hp : 0}
                                         </span>
                                     </div>
                                 </div>

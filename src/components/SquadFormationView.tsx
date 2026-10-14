@@ -79,7 +79,9 @@ export const SquadFormationView: React.FC<SquadFormationViewProps> = ({
     const stats = progress.playerStats;
     const heroGender = stats?.gender || 'male';
     const isFemaleCommander = heroGender === 'female';
-    const heroHp = stats ? stats.baseHp + stats.strength : 100;
+    const baseHp = typeof stats?.baseHp === 'number' && !isNaN(stats.baseHp) ? stats.baseHp : 100;
+    const strength = typeof stats?.strength === 'number' && !isNaN(stats.strength) ? stats.strength : 5;
+    const heroHp = baseHp + strength;
     const heroLevel = stats?.level ?? 0;
     const heroCommanderSprite = getHeroCommanderSprite(heroGender);
     const hiredCompanions = progress.hiredNpcs || [];

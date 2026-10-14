@@ -1,0 +1,2 @@
+// Directory created for goblin animation sprites.
+// Please place the 16 image.png files here.

@@ -50,7 +50,7 @@ interface MazeConfig {
     coinCount: number;
     gemCount: number;
     hourglassCount: number;
-    keyDoorCount: number;
+    chestCount: number;
 }
 
 const MAZE_CONFIGS: Record<MazeDifficulty, MazeConfig> = {
@@ -61,16 +61,16 @@ const MAZE_CONFIGS: Record<MazeDifficulty, MazeConfig> = {
         coinCount: 6,
         gemCount: 2,
         hourglassCount: 2,
-        keyDoorCount: 1
+        chestCount: 1
     },
     normal: {
         size: 21,
         name: 'Катакомби Таверни',
-        description: 'Старовинні заплутані ходи під таверною. Баланс скринь, дверей та пасток.',
+        description: 'Старовинні заплутані ходи під таверною. Баланс скринь та пасток.',
         coinCount: 10,
         gemCount: 3,
         hourglassCount: 3,
-        keyDoorCount: 2
+        chestCount: 2
     },
     hard: {
         size: 27,
@@ -79,11 +79,11 @@ const MAZE_CONFIGS: Record<MazeDifficulty, MazeConfig> = {
         coinCount: 16,
         gemCount: 5,
         hourglassCount: 4,
-        keyDoorCount: 3
+        chestCount: 3
     }
 };
 
-type ItemType = 'coin' | 'gem' | 'key' | 'door' | 'hourglass' | 'boots';
+type ItemType = 'coin' | 'gem' | 'key' | 'chest' | 'hourglass' | 'boots';
 
 interface LabyrinthCell {
     x: number;
@@ -92,7 +92,7 @@ interface LabyrinthCell {
     isStart: boolean;
     isExit: boolean;
     item?: ItemType;
-    isDoorLocked?: boolean;
+    isChestLocked?: boolean;
 }
 
 export default function TavernLabyrinthModal({
@@ -330,17 +330,17 @@ export default function TavernLabyrinthModal({
         // Shuffle open tiles for random placement of items
         openTiles.sort(() => Math.random() - 0.5);
 
-        // Place Keys and Doors (Gates)
+        // Place Keys and Chests
         let tileIndex = 0;
-        for (let i = 0; i < config.keyDoorCount && tileIndex < openTiles.length - 2; i++) {
+        for (let i = 0; i < config.chestCount && tileIndex < openTiles.length - 2; i++) {
             // Place a key
             const keyTile = openTiles[tileIndex++];
             grid[keyTile.y][keyTile.x].item = 'key';
 
-            // Place a locked gate near the exit quadrant or halfway
-            const doorTile = openTiles[tileIndex++];
-            grid[doorTile.y][doorTile.x].item = 'door';
-            grid[doorTile.y][doorTile.x].isDoorLocked = true;
+            // Place a locked chest
+            const chestTile = openTiles[tileIndex++];
+            grid[chestTile.y][chestTile.x].item = 'chest';
+            grid[chestTile.y][chestTile.x].isChestLocked = true;
         }
 
         // Place Hourglasses (+20s bonus time)
@@ -394,12 +394,12 @@ export default function TavernLabyrinthModal({
                         if (cell.item === 'key') {
                             nextKeys += 1;
                         }
-                        if (cell.item === 'door' && cell.isDoorLocked) {
+                        if (cell.item === 'chest' && cell.isChestLocked) {
                             if (nextKeys > 0) {
                                 nextKeys -= 1;
                             } else {
-                                // Softlock detected at this locked door! Auto-unlock to prevent softlock.
-                                cell.isDoorLocked = false;
+                                // Softlock detected at this locked chest! Auto-unlock to prevent softlock.
+                                cell.isChestLocked = false;
                             }
                         }
                         const vKey = `${nx},${ny},${nextKeys}`;
@@ -422,9 +422,6 @@ export default function TavernLabyrinthModal({
                 if (cy < exitY) cy++;
                 else if (cy > exitY) cy--;
                 grid[cy][cx].isWall = false;
-                if (grid[cy][cx].isDoorLocked) {
-                    grid[cy][cx].isDoorLocked = false;
-                }
             }
         }
 
@@ -512,18 +509,23 @@ export default function TavernLabyrinthModal({
             return;
         }
 
-        // Locked Door Check
-        if (targetCell.item === 'door' && targetCell.isDoorLocked) {
+        // Locked Chest Check
+        if (targetCell.item === 'chest' && targetCell.isChestLocked) {
             if (keysCount > 0) {
-                // Unlock door!
+                // Unlock chest!
                 setKeysCount(k => k - 1);
-                targetCell.isDoorLocked = false;
+                targetCell.isChestLocked = false;
                 targetCell.item = undefined;
-                playMazeSound('door');
-                addFloatingNotice('🔓 Залізні ворота відчинено ключем!', 'text-emerald-400');
+                
+                // Reward gold
+                const goldReward = 50 + Math.floor(Math.random() * 50);
+                setGoldCollected(g => g + goldReward);
+                
+                playMazeSound('door'); // Using 'door' sound for chest opening
+                addFloatingNotice(`🔓 Скриня відчинена! +${goldReward} золото 💰`, 'text-emerald-400');
             } else {
                 playMazeSound('warn');
-                addFloatingNotice('🔒 Ворота замкнені! Знайдіть ключ 🗝️', 'text-amber-400');
+                addFloatingNotice('🔒 Скриня замкнена! Знайдіть ключ 🗝️', 'text-amber-400');
                 return;
             }
         }
@@ -758,14 +760,14 @@ export default function TavernLabyrinthModal({
                             ctx.fillText('⏳', px + tileSize / 2, py + tileSize / 2);
                         } else if (cell.item === 'boots') {
                             ctx.fillText('👟', px + tileSize / 2, py + tileSize / 2);
-                        } else if (cell.item === 'door') {
-                            // Locked portcullis gate
+                        } else if (cell.item === 'chest') {
+                            // Locked chest
                             ctx.fillStyle = 'rgba(120, 53, 15, 0.7)';
                             ctx.fillRect(px + 2, py + 2, tileSize - 4, tileSize - 4);
                             ctx.strokeStyle = '#f59e0b';
                             ctx.lineWidth = 1.5;
                             ctx.strokeRect(px + 2, py + 2, tileSize - 4, tileSize - 4);
-                            ctx.fillText('🔒', px + tileSize / 2, py + tileSize / 2);
+                            ctx.fillText(cell.isChestLocked ? '🔒' : '🧰', px + tileSize / 2, py + tileSize / 2);
                         }
                     }
                 }

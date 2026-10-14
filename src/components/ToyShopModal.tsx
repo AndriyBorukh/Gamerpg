@@ -962,12 +962,14 @@ export function ToyShopModal({
                                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                                     {sq.fighters.map(fighter => {
                                                         const isDead = fighter.isDead || fighter.currentHp <= 0;
-                                                        const thresholdInfo = getRpgNextLevelExpThreshold(fighter.experience);
+                                                        const exp = typeof fighter.experience === 'number' && !isNaN(fighter.experience) ? fighter.experience : 0;
+                                                        const thresholdInfo = getRpgNextLevelExpThreshold(exp);
                                                         const nextThresh = thresholdInfo.nextThreshold;
                                                         const prevThresh = fighter.level > 0 ? 20 * Math.pow(2, fighter.level - 1) : 0;
+                                                        const denom = Math.max(1, nextThresh - prevThresh);
                                                         const progressPercent = fighter.level >= 4 
                                                             ? 100 
-                                                            : Math.min(100, Math.max(0, ((fighter.experience - prevThresh) / (nextThresh - prevThresh)) * 100));
+                                                            : Math.min(100, Math.max(0, ((exp - prevThresh) / denom) * 100));
 
                                                         return (
                                                             <div 
@@ -1030,21 +1032,21 @@ export function ToyShopModal({
                                                                 <div className={`grid ${fighter.maxMp ? 'grid-cols-4' : 'grid-cols-3'} gap-1.5 text-center text-[10px] bg-stone-900/60 p-1.5 rounded-lg border border-stone-800 font-mono`}>
                                                                     <div className="text-red-300">
                                                                         <span className="block text-[8px] text-stone-500 uppercase font-sans">HP</span>
-                                                                        {fighter.currentHp}/{fighter.maxHp}
+                                                                        {typeof fighter.currentHp === 'number' && !isNaN(fighter.currentHp) ? fighter.currentHp : 0}/{typeof fighter.maxHp === 'number' && !isNaN(fighter.maxHp) ? fighter.maxHp : 30}
                                                                     </div>
                                                                     {fighter.maxMp ? (
                                                                         <div className="text-sky-300">
                                                                             <span className="block text-[8px] text-stone-500 uppercase font-sans">MP</span>
-                                                                            {fighter.currentMp ?? fighter.maxMp}/{fighter.maxMp}
+                                                                            {typeof fighter.currentMp === 'number' && !isNaN(fighter.currentMp) ? fighter.currentMp : (fighter.maxMp || 0)}/{fighter.maxMp}
                                                                         </div>
                                                                     ) : null}
                                                                     <div className="text-amber-300">
                                                                         <span className="block text-[8px] text-stone-500 uppercase font-sans">АТК</span>
-                                                                        {fighter.damage}
+                                                                        {typeof fighter.damage === 'number' && !isNaN(fighter.damage) ? fighter.damage : 6}
                                                                     </div>
                                                                     <div className="text-blue-300">
                                                                         <span className="block text-[8px] text-stone-500 uppercase font-sans">ЗАХ</span>
-                                                                        {fighter.defense}
+                                                                        {typeof fighter.defense === 'number' && !isNaN(fighter.defense) ? fighter.defense : 2}
                                                                     </div>
                                                                 </div>
 

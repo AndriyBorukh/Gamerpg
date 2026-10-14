@@ -1,0 +1,17 @@
+/*
+    Спрайт-лист гобліна (Sprite Sheet)
+    Формат: 8 кадрів по горизонталі, кожен 32x32.
+*/
+.goblin-sprite {
+    width: 32px;
+    height: 32px;
+    background-color: green; /* Fallback for visibility */
+    /* background-image: url('data:image/svg+xml;utf8,<svg ...>'); */
+    background-size: 256px 32px;
+    animation: goblin-run 0.8s steps(8) infinite;
+}
+
+@keyframes goblin-run {
+    from { background-position: 0 0; }
+    to { background-position: -256px 0; }
+}
